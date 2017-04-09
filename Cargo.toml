@@ -1,0 +1,7 @@
+[package]
+name = "marsipan"
+version = "0.1.0"
+authors = ["Jude Taylor <me@jude.bio>"]
+
+[dependencies]
+damnpacket = { path = "damnpacket" }
