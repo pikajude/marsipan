@@ -5,3 +5,11 @@ authors = ["Jude Taylor <me@jude.bio>"]
 
 [dependencies]
 damnpacket = { path = "damnpacket" }
+tokio-proto = "0.1"
+tokio-io = "0.1"
+tokio-core = "0.1"
+bytes = "0.4"
+nom = "*"
+futures = "*"
+ansi_term = "*"
+lazy_static = "0.2"

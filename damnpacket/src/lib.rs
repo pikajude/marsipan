@@ -1,7 +1,11 @@
 #[macro_use]
 extern crate nom;
+extern crate ansi_term;
 
+use ansi_term::{ANSIByteStrings,Colour,Style};
 use nom::*;
+use std::collections::HashMap;
+use std::io;
 
 type Bytes = Vec<u8>;
 
@@ -9,7 +13,7 @@ type Bytes = Vec<u8>;
 pub struct Message {
     pub name: Bytes,
     pub argument: Option<Bytes>,
-    pub attrs: Vec<(Bytes, String)>,
+    pub attrs: HashMap<Bytes, String>,
     pub body: Option<MessageBody>,
 }
 
@@ -20,13 +24,79 @@ pub struct MessageBody(Bytes);
 pub struct SubMessage {
     pub name: Option<Bytes>,
     pub argument: Option<Bytes>,
-    pub attrs: Vec<(Bytes, String)>,
+    pub attrs: HashMap<Bytes, String>,
     pub body: Option<MessageBody>,
 }
 
 impl MessageBody {
     pub fn submessage(&self) -> Result<SubMessage, nom::ErrorKind> {
         parse_submessage(self.0.as_slice()).to_result()
+    }
+}
+
+impl<'a> From<&'a [u8]> for Message {
+    fn from(s: &'a [u8]) -> Self {
+        parse(s).expect("no parse")
+    }
+}
+
+impl From<&'static str> for Message {
+    fn from(s: &'static str) -> Self {
+        Self::from(s.as_bytes())
+    }
+}
+
+impl Message {
+    pub fn get_attr<V>(&self, key: V) -> Option<&str>
+        where V: Into<Vec<u8>> {
+        self.attrs.get(&key.into()).map(|x|x.as_ref())
+    }
+
+    pub fn has_attr<V, S>(&self, key: V, value: S) -> bool
+        where V: Into<Vec<u8>>,
+              S: Into<String> {
+        self.get_attr(key) == Some(value.into().as_ref())
+    }
+
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.extend(self.name.clone());
+        if let Some(ref arg) = self.argument {
+            bytes.extend(b" ");
+            bytes.extend(arg);
+        }
+        bytes.extend(b"\n");
+        for (k, v) in self.attrs.iter() {
+            bytes.extend(k);
+            bytes.extend(b"=");
+            bytes.extend(v.as_bytes());
+            bytes.extend(b"\n");
+        }
+        if let Some(MessageBody(ref body)) = self.body {
+            bytes.extend(b"\n");
+            bytes.extend(body);
+        } else {
+            bytes.extend(b"\0");
+        }
+        bytes
+    }
+
+    pub fn pretty<W>(&self, mut io: W) -> io::Result<()>
+        where W: io::Write {
+        let mut strings = vec![];
+        strings.push(Colour::Green.paint(self.name.clone()));
+        if let Some(ref arg) = self.argument {
+            strings.push(Style::default().paint(&b" "[..]));
+            strings.push(Colour::Yellow.paint(&arg[..]));
+        }
+        strings.push(Style::default().paint(&b"\n"[..]));
+        for (k, v) in self.attrs.iter() {
+            strings.push(Style::default().paint(&k[..]));
+            strings.push(Colour::Fixed(11).paint(&b"="[..]));
+            strings.push(Style::default().paint(v.as_bytes()));
+            strings.push(Style::default().paint(&b"\n"[..]));
+        }
+        ANSIByteStrings(&strings[..]).write_to(&mut io)
     }
 }
 
@@ -72,7 +142,7 @@ fn parse_message(input: &[u8]) -> IResult<&[u8], Message> {
                   Message {
                       name: nm.to_vec(),
                       argument: arg.map(|x| x.to_vec()),
-                      attrs: attrs,
+                      attrs: attrs.into_iter().collect(),
                       body: body,
                   })
 }
@@ -90,7 +160,7 @@ fn parse_submessage(input: &[u8]) -> IResult<&[u8], SubMessage> {
                           SubMessage {
                               name: None,
                               argument: None,
-                              attrs: my_attrs,
+                              attrs: my_attrs.into_iter().collect(),
                               body: body,
                           })
         }
@@ -107,15 +177,13 @@ fn parse_submessage(input: &[u8]) -> IResult<&[u8], SubMessage> {
     }
 }
 
-pub fn parse<'a>(bs: Vec<u8>) -> Result<Message, nom::ErrorKind> {
-    let res = parse_message(&bs[..]);
-    println!("{:?}", res);
-    res.to_result()
+pub fn parse<'a>(bs: &[u8]) -> Result<Message, nom::ErrorKind> {
+    parse_message(bs).to_result()
 }
 
 #[test]
 fn parse_basic() {
-    assert_eq!(parse(b"foo bar\nbaz=qux\n\nthis is the body\0".to_vec()),
+    assert_eq!(parse(b"foo bar\nbaz=qux\n\nthis is the body\0"),
                Ok(Message {
                       name: b"foo".to_vec(),
                       argument: Some(b"bar".to_vec()),
@@ -126,7 +194,7 @@ fn parse_basic() {
 
 #[test]
 fn parse_no_body() {
-    assert_eq!(parse(b"foo bar\nbaz=qux\n\0".to_vec()),
+    assert_eq!(parse(b"foo bar\nbaz=qux\n\0"),
                Ok(Message {
                       name: b"foo".to_vec(),
                       argument: Some(b"bar".to_vec()),
@@ -137,7 +205,7 @@ fn parse_no_body() {
 
 #[test]
 fn parse_no_attrs() {
-    assert_eq!(parse(b"foo bar\n\0".to_vec()),
+    assert_eq!(parse(b"foo bar\n\0"),
                Ok(Message {
                       name: b"foo".to_vec(),
                       argument: Some(b"bar".to_vec()),
@@ -148,7 +216,7 @@ fn parse_no_attrs() {
 
 #[test]
 fn parse_no_arg() {
-    assert_eq!(parse(b"foo\n\0".to_vec()),
+    assert_eq!(parse(b"foo\n\0"),
                Ok(Message {
                       name: b"foo".to_vec(),
                       argument: None,
@@ -159,7 +227,7 @@ fn parse_no_arg() {
 
 #[test]
 fn parse_sub() {
-    let msg = parse(b"foo\n\na=b\nc=d\n\0".to_vec())
+    let msg = parse(b"foo\n\na=b\nc=d\n\0")
         .expect("oh no")
         .body
         .expect("no body");
