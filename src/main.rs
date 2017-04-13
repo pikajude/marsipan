@@ -15,6 +15,7 @@ extern crate lazy_static;
 use ansi_term::Colour;
 use bytes::BytesMut;
 use damnpacket::Message;
+use futures::future;
 use futures::future::Future;
 use futures::{Stream, Sink};
 use std::io;
@@ -30,6 +31,14 @@ use tokio_io::codec::{Decoder, Encoder};
 pub enum MarsError {
     Io(io::Error),
     Parse(nom::ErrorKind),
+    Fut(futures::sync::mpsc::SendError<Message>),
+    Nul,
+}
+
+impl From<()> for MarsError {
+    fn from(x: ()) -> Self {
+        MarsError::Nul
+    }
 }
 
 impl From<io::Error> for MarsError {
@@ -41,6 +50,12 @@ impl From<io::Error> for MarsError {
 impl From<nom::ErrorKind> for MarsError {
     fn from(e: nom::ErrorKind) -> Self {
         MarsError::Parse(e)
+    }
+}
+
+impl From<futures::sync::mpsc::SendError<damnpacket::Message>> for MarsError {
+    fn from(e: futures::sync::mpsc::SendError<damnpacket::Message>) -> Self {
+        MarsError::Fut(e)
     }
 }
 
@@ -74,7 +89,9 @@ impl Encoder for DamnCodec {
     }
 }
 
-type Callback = fn(Message) -> Option<Message>;
+type Response = Box<Future<Item=Option<Message>, Error=MarsError>>;
+
+type Callback = fn(Message) -> Response;
 
 lazy_static! {
     static ref ACTIONS: HashMap<&'static [u8], Callback> = {
@@ -85,21 +102,25 @@ lazy_static! {
     };
 }
 
-fn respond_damnserver(_: Message) -> Option<Message> {
-    Some(Message {
+fn wrap(x: Option<Message>) -> Response {
+    Box::new(future::ok(x))
+}
+
+fn respond_damnserver(_: Message) -> Response {
+    wrap(Some(Message {
         name: b"login".to_vec(),
         argument: Some(b"participle".to_vec()),
         attrs: vec![(b"pk".to_vec(), String::from(env!("PK")))].into_iter().collect(),
         body: None,
-    })
+    }))
 }
 
-fn respond_login(msg: Message) -> Option<Message> {
+fn respond_login(msg: Message) -> Response {
     match msg.get_attr(&b"e"[..]) {
         Some("ok") => println!("success"),
         x => panic!("Failed to log in: {:?}", x)
     };
-    None
+    wrap(None)
 }
 
 fn dump(it: &damnpacket::Message, direction: bool) {
@@ -127,21 +148,24 @@ fn repeatedly(h: &Handle, addr: &SocketAddr) {
             Ok(stream) => Ok(stream.framed(DamnCodec).split()),
             Err(e) => Err(MarsError::from(e))
         }
-    ).and_then(|(tx, rx)|
+    ).and_then(|(tx, rx)| {
+        let (chansend, chanrecv) = futures::sync::mpsc::channel(16);
         tx.send(greeting).and_then(|writer| {
-            rx.filter_map(|item| {
+            rx.and_then(|item| {
                 dump(&item, true);
                 match ACTIONS.get(item.name.as_slice()) {
                     Some(f) => f(item),
                     _ => {
                         println!("unknown message");
-                        None
+                        Box::new(future::ok(None))
                     }
                 }
-            }).map(|item| { dump(&item, false); item })
+            }).filter_map(|x|x)
+                .select(chanrecv.map_err(|x|MarsError::from(x)))
+                .map(|item| { dump(&item, false); item })
                 .forward(writer)
         })
-    ).map(|_| ())
+    }).map(|_| ())
     .or_else(move |e| {
         println!("An error: {:?}", e);
         repeatedly(&h2, &a2);
