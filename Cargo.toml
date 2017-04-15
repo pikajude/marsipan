@@ -6,6 +6,8 @@ authors = ["Jude Taylor <me@jude.bio>"]
 [dependencies]
 damnpacket = { path = "damnpacket" }
 tokio-proto = "0.1"
+env_logger = "*"
+log = "*"
 tokio-io = "0.1"
 tokio-core = "0.1"
 tokio-timer = "0.1"

@@ -96,6 +96,11 @@ impl Message {
             strings.push(Style::default().paint(v.as_bytes()));
             strings.push(Style::default().paint(&b"\n"[..]));
         }
+        if let Some(MessageBody(ref body)) = self.body {
+            strings.push(Style::default().paint(&b"\n"[..]));
+            let len = body.len();
+            strings.push(Style::default().paint(&body[0..len - 2]));
+        }
         ANSIByteStrings(&strings[..]).write_to(&mut io)
     }
 }
@@ -178,7 +183,16 @@ fn parse_submessage(input: &[u8]) -> IResult<&[u8], SubMessage> {
 }
 
 pub fn parse<'a>(bs: &[u8]) -> Result<Message, nom::ErrorKind> {
-    parse_message(bs).to_result()
+    let res = parse_message(bs);
+    match res {
+        IResult::Done(x, out) => if x.len() == 0 {
+            Ok(out)
+        } else {
+            Err(nom::ErrorKind::Custom(0xdeadbeef))
+        },
+        IResult::Error(e) => Err(e),
+        IResult::Incomplete(_) => panic!("incomplete input passed to parser")
+    }
 }
 
 #[test]
@@ -187,7 +201,7 @@ fn parse_basic() {
                Ok(Message {
                       name: b"foo".to_vec(),
                       argument: Some(b"bar".to_vec()),
-                      attrs: vec![(b"baz".to_vec(), String::from("qux"))],
+                      attrs: vec![(b"baz".to_vec(), String::from("qux"))].into_iter().collect(),
                       body: Some(MessageBody(b"this is the body\0".to_vec())),
                   }));
 }
@@ -198,9 +212,20 @@ fn parse_no_body() {
                Ok(Message {
                       name: b"foo".to_vec(),
                       argument: Some(b"bar".to_vec()),
-                      attrs: vec![(b"baz".to_vec(), String::from("qux"))],
+                      attrs: vec![(b"baz".to_vec(), String::from("qux"))].into_iter().collect(),
                       body: None,
                   }));
+}
+
+#[test]
+fn parse_empty_attr() {
+    assert_eq!(parse(b"foo\nbaz=\n\0"),
+        Ok(Message {
+            name: b"foo".to_vec(),
+            argument: None,
+            attrs: vec![(b"baz".to_vec(), String::from(""))].into_iter().collect(),
+            body: None,
+        }))
 }
 
 #[test]
@@ -209,7 +234,7 @@ fn parse_no_attrs() {
                Ok(Message {
                       name: b"foo".to_vec(),
                       argument: Some(b"bar".to_vec()),
-                      attrs: vec![],
+                      attrs: HashMap::new(),
                       body: None,
                   }));
 }
@@ -220,7 +245,7 @@ fn parse_no_arg() {
                Ok(Message {
                       name: b"foo".to_vec(),
                       argument: None,
-                      attrs: vec![],
+                      attrs: HashMap::new(),
                       body: None,
                   }));
 }
@@ -236,7 +261,7 @@ fn parse_sub() {
                       name: None,
                       argument: None,
                       attrs: vec![(b"a".to_vec(), String::from("b")),
-                                  (b"c".to_vec(), String::from("d"))],
+                                  (b"c".to_vec(), String::from("d"))].into_iter().collect(),
                       body: None,
                   }))
 }
