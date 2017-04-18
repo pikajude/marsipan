@@ -1,9 +1,9 @@
 use futures::Async;
 use futures::Future;
 use futures::Stream;
+use futures::task;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::cmp;
 use std::collections::BinaryHeap;
 use std::rc::Rc;
 use std::time::Duration;
@@ -57,22 +57,26 @@ impl<A> Ord for Countdown<A> {
     }
 }
 
-struct MessageQueue {
+struct MQ {
     heap: BinaryHeap<Countdown<Message>>,
     timeout: Option<Timeout>,
     handle: Handle
 }
 
 #[derive(Clone)]
-pub struct MQ(Rc<RefCell<MessageQueue>>);
+pub struct MessageQueue(Rc<RefCell<MQ>>);
 
-impl MessageQueue {
+impl MQ {
     fn new(h: &Handle) -> Self {
-        MessageQueue {
+        MQ {
             heap: BinaryHeap::new(),
             timeout: None,
             handle: h.clone()
         }
+    }
+
+    fn push(&mut self, msg: Message) {
+        self.schedule_at(msg, Instant::now());
     }
 
     fn schedule(&mut self, msg: Message, d: Duration) {
@@ -80,20 +84,19 @@ impl MessageQueue {
     }
 
     fn schedule_at(&mut self, msg: Message, ins: Instant) {
-        if ins < Instant::now() {
-            debug!("scheduling a message for the past, it will be sent immediately")
-        }
         self.heap.push(Countdown::at(ins, msg));
         self.reschedule();
     }
 
     fn reschedule(&mut self) {
         if let Some(soonest) = self.heap.peek() {
-            let target = soonest.stamp - Instant::now();
-            self.timeout = Some(
-                Timeout::new(cmp::max(target, Duration::new(0,0)), &self.handle)
-                    .expect("Timeout::new should never fail")
-            );
+            let i = Instant::now();
+            self.timeout = Some(Timeout::new(if soonest.stamp < i {
+                Duration::new(0,0)
+            } else {
+                soonest.stamp - i
+            }, &self.handle).unwrap());
+            task::park().unpark();
         } else {
             self.timeout = None;
         }
@@ -106,7 +109,8 @@ impl MessageQueue {
             Some(ref mut t) => match t.poll() {
                 Ok(Async::Ready(_)) => {
                     removed_item = true;
-                    Ok(Async::Ready(Some(self.heap.pop().expect("Invariant: timeout with empty heap").value)))
+                    let soonest = self.heap.pop().expect("Invariant: timeout with empty heap").value;
+                    Ok(Async::Ready(Some(soonest)))
                 },
                 Ok(Async::NotReady) => Ok(Async::NotReady),
                 Err(e) => Err(MarsError::from(e))
@@ -119,7 +123,11 @@ impl MessageQueue {
     }
 }
 
-impl MQ {
+impl MessageQueue {
+    pub fn push(self, msg: Message) {
+        self.0.borrow_mut().push(msg)
+    }
+
     pub fn schedule(self, msg: Message, d: Duration) {
         self.0.borrow_mut().schedule(msg, d)
     }
@@ -129,11 +137,11 @@ impl MQ {
     }
 
     pub fn new(h: &Handle) -> Self {
-        MQ(Rc::new(RefCell::new(MessageQueue::new(h))))
+        MessageQueue(Rc::new(RefCell::new(MQ::new(h))))
     }
 }
 
-impl Stream for MQ {
+impl Stream for MessageQueue {
     type Item = Message;
     type Error = MarsError;
 

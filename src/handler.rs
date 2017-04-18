@@ -1,40 +1,45 @@
 use damnpacket::Message;
-use futures::future;
-use futures::Future;
-use messagequeue::MQ;
+use damnpacket::MessageIsh;
+use messagequeue::MessageQueue;
 use std::collections::HashMap;
-use MarsError;
 
-type Response = Box<Future<Item=Option<Message>, Error=MarsError>>;
-
-type Callback = fn(Message, MQ) -> Response;
+type Callback = fn(Message, MessageQueue);
 
 lazy_static! {
     pub static ref ACTIONS: HashMap<&'static [u8], Callback> = {
         let mut m = HashMap::new();
         m.insert(&b"dAmnServer"[..], respond_damnserver as Callback);
         m.insert(&b"login"[..], respond_login as Callback);
+        m.insert(&b"ping"[..], respond_ping as Callback);
+        m.insert(&b"recv"[..], respond_recv as Callback);
         m
     };
 }
 
-pub fn wrap(x: Option<Message>) -> Response {
-    Box::new(future::ok(x))
+fn respond_ping(_: Message, mq: MessageQueue) {
+    mq.push(Message::from("pong\n\0"));
 }
 
-fn respond_damnserver(_: Message, _: MQ) -> Response {
-    wrap(Some(Message {
-        name: b"login".to_vec(),
-        argument: Some(b"participle".to_vec()),
-        attrs: vec![(b"pk".to_vec(), String::from(env!("PK")))].into_iter().collect(),
-        body: None,
-    }))
+fn respond_damnserver(_: Message, mq: MessageQueue) {
+    mq.push(Message::from(concat!("login participle\npk=", env!("PK"), "\n\0")));
 }
 
-fn respond_login(msg: Message, _: MQ) -> Response {
+fn respond_login(msg: Message, mq: MessageQueue) {
     match msg.get_attr(&b"e"[..]) {
-        Some("ok") => info!("Logged in successfully"),
+        Some("ok") => {
+            info!("Logged in successfully");
+            info!("Joining chat:devintesting");
+            mq.push(Message::from("join chat:devintesting\n\0"));
+        },
         x => error!("Failed to log in: {:?}", x)
     };
-    wrap(None)
+}
+
+fn respond_recv(msg: Message, mq: MessageQueue) {
+    for sub in msg.submessage().into_iter() {
+        match sub.name.as_ref().map(|x|x.as_slice()) {
+            Some(b"msg") | Some(b"action") => debug!("Received a message: {}", sub.body_().to_string()),
+            _ => debug!("Unknown subtype")
+        }
+    }
 }

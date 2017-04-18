@@ -32,7 +32,7 @@ pub mod messagequeue;
 
 use codec::DamnCodec;
 use handler::ACTIONS;
-use messagequeue::MQ;
+use messagequeue::MessageQueue;
 
 #[derive(Debug)]
 pub enum MarsError {
@@ -80,10 +80,10 @@ fn dump(it: &damnpacket::Message, direction: bool) {
 }
 
 fn repeatedly(h: &Handle, addr: &SocketAddr) {
-    let greeting = Message::from(&b"dAmnClient 0.3\nagent=marsipan\n\0"[..]);
+    let greeting = Message::from("dAmnClient 0.3\nagent=marsipan\n\0");
     let a2 = addr.clone();
     let h2 = h.clone();
-    let mq = MQ::new(&h);
+    let mq = MessageQueue::new(&h);
     let mq2 = mq.clone();
     h.spawn(TcpStream::connect(&addr, &h).then(|res|
         match res {
@@ -94,13 +94,11 @@ fn repeatedly(h: &Handle, addr: &SocketAddr) {
         tx.send(greeting).and_then(|writer| {
             rx.and_then(move |item| {
                 dump(&item, true);
-                match ACTIONS.get(item.name.as_slice()) {
+                match ACTIONS.get(&item.name[..]) {
                     Some(f) => f(item, mq.clone()),
-                    _ => {
-                        println!("unknown message");
-                        handler::wrap(None)
-                    }
-                }
+                    _ => debug!("unknown message")
+                };
+                Ok(None)
             })
                 .filter_map(|x|x)
                 .select(mq2)
@@ -109,7 +107,7 @@ fn repeatedly(h: &Handle, addr: &SocketAddr) {
         })
     ).map(|_| ())
     .or_else(move |e| {
-        println!("An error: {:?}", e);
+        warn!("Error during respond loop: {:?}", e);
         repeatedly(&h2, &a2);
         Ok(())
     }))
@@ -122,20 +120,20 @@ fn log_init() -> Result<(), log::SetLoggerError> {
         builder.parse(&s);
     }
 
-    builder.format(|record| {
-        format!("{}{}", pretty_level(record.level()), record.args())
-    }).init()
-}
-
-fn pretty_level(l: log::LogLevel) -> &'static str {
-    use log::LogLevel;
-    match l {
-        LogLevel::Error => "\x1b[31mERR\x1b[0m ",
-        LogLevel::Warn => "\x1b[33mWRN\x1b[0m ",
-        LogLevel::Info => "\x1b[34mINF\x1b[0m ",
-        LogLevel::Debug => "\x1b[35mDBG\x1b[0m ",
-        LogLevel::Trace => "\x1b[36mTRC\x1b[0m "
+    fn pretty_level(l: log::LogLevel) -> &'static str {
+        use log::LogLevel;
+        match l {
+            LogLevel::Error => "\x1b[31mERR\x1b[0m ",
+            LogLevel::Warn => "\x1b[33mWRN\x1b[0m ",
+            LogLevel::Info => "\x1b[34mINF\x1b[0m ",
+            LogLevel::Debug => "\x1b[35mDBG\x1b[0m ",
+            LogLevel::Trace => "\x1b[36mTRC\x1b[0m "
+        }
     }
+
+    builder.format(|record|
+        format!("{}{}", pretty_level(record.level()), record.args())
+    ).init()
 }
 
 fn main() {

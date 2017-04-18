@@ -1,11 +1,15 @@
-#[macro_use]
-extern crate nom;
 extern crate ansi_term;
+#[macro_use] extern crate log;
+#[macro_use] extern crate nom;
+extern crate htmlescape;
 
 use ansi_term::{ANSIByteStrings,Colour,Style};
 use nom::*;
 use std::collections::HashMap;
 use std::io;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AsciiBytes(Vec<u8>);
 
 type Bytes = Vec<u8>;
 
@@ -18,7 +22,7 @@ pub struct Message {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MessageBody(Bytes);
+pub struct MessageBody(AsciiBytes);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubMessage {
@@ -28,9 +32,42 @@ pub struct SubMessage {
     pub body: Option<MessageBody>,
 }
 
+impl AsciiBytes {
+    fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    fn decode(&self) -> String {
+        let intermediate: String = self.trim().iter().map(|&c| c as char).collect();
+        match htmlescape::decode_html(intermediate.as_str()) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("HTML decoding error: {:?}", e);
+                intermediate
+            }
+        }
+    }
+
+    fn trim(&self) -> &[u8] {
+        let len = self.0.len();
+        let target_len = if len > 1 && self.0[len - 2] == b'\n' {
+            len - 2
+        } else if self.0[len - 1] == b'\0' {
+            len - 1
+        } else {
+            len
+        };
+        &self.0[0..target_len]
+    }
+}
+
 impl MessageBody {
     pub fn submessage(&self) -> Result<SubMessage, nom::ErrorKind> {
         parse_submessage(self.0.as_slice()).to_result()
+    }
+
+    pub fn to_string(&self) -> String {
+        self.0.decode()
     }
 }
 
@@ -46,16 +83,30 @@ impl From<&'static str> for Message {
     }
 }
 
-impl Message {
-    pub fn get_attr<V>(&self, key: V) -> Option<&str>
-        where V: Into<Vec<u8>> {
-        self.attrs.get(&key.into()).map(|x|x.as_ref())
+pub trait MessageIsh {
+    fn get_attr<V>(&self, key: V) -> Option<&str>
+        where V: Into<Bytes>;
+
+    fn has_attr<V>(&self, key: V) -> bool
+        where V: Into<Bytes> {
+        self.get_attr(key).is_some()
     }
 
-    pub fn has_attr<V, S>(&self, key: V, value: S) -> bool
-        where V: Into<Vec<u8>>,
-              S: Into<String> {
-        self.get_attr(key) == Some(value.into().as_ref())
+    fn has_attr_of<V, S>(&self, key: V, value: S) -> bool
+        where V: Into<Bytes>,
+              S: AsRef<str> {
+        self.get_attr(key).map(|q|q == value.as_ref()).unwrap_or(false)
+    }
+
+    fn body_(&self) -> &MessageBody;
+}
+
+impl Message {
+    pub fn submessage(&self) -> Option<SubMessage> {
+        match self.body {
+            None => None,
+            Some(ref m) => m.submessage().ok()
+        }
     }
 
     pub fn as_bytes(&self) -> Vec<u8> {
@@ -72,7 +123,7 @@ impl Message {
             bytes.extend(v.as_bytes());
             bytes.extend(b"\n");
         }
-        if let Some(MessageBody(ref body)) = self.body {
+        if let Some(MessageBody(AsciiBytes(ref body))) = self.body {
             bytes.extend(b"\n");
             bytes.extend(body);
         } else {
@@ -84,6 +135,7 @@ impl Message {
     pub fn pretty<W>(&self, mut io: W) -> io::Result<()>
         where W: io::Write {
         let mut strings = vec![];
+        let mut buf = vec![];
         strings.push(Colour::Green.paint(self.name.clone()));
         if let Some(ref arg) = self.argument {
             strings.push(Style::default().paint(&b" "[..]));
@@ -96,12 +148,40 @@ impl Message {
             strings.push(Style::default().paint(v.as_bytes()));
             strings.push(Style::default().paint(&b"\n"[..]));
         }
-        if let Some(MessageBody(ref body)) = self.body {
+        if let Some(MessageBody(ref m)) = self.body {
             strings.push(Style::default().paint(&b"\n"[..]));
-            let len = body.len();
-            strings.push(Style::default().paint(&body[0..len - 2]));
+            buf.extend(m.decode().as_bytes());
         }
+        strings.push(Style::default().paint(buf));
         ANSIByteStrings(&strings[..]).write_to(&mut io)
+    }
+}
+
+impl MessageIsh for Message {
+    fn get_attr<V>(&self, key: V) -> Option<&str>
+        where V: Into<Vec<u8>> {
+        self.attrs.get(&key.into()).map(|x|x.as_str())
+    }
+
+    fn body_(&self) -> &MessageBody {
+        match self.body {
+            None => panic!("body_() but no body"),
+            Some(ref b) => b
+        }
+    }
+}
+
+impl MessageIsh for SubMessage {
+    fn get_attr<V>(&self, key: V) -> Option<&str>
+        where V: Into<Vec<u8>> {
+        self.attrs.get(&key.into()).map(|x|x.as_str())
+    }
+
+    fn body_(&self) -> &MessageBody {
+        match self.body {
+            None => panic!("invariant: body_ called with no body"),
+            Some(ref b) => b
+        }
     }
 }
 
@@ -110,8 +190,7 @@ fn attr(input: &[u8]) -> IResult<&[u8], (Bytes, String)> {
     let (i2, _) = try_parse!(i1, tag!("="));
     let (i3, val) = try_parse!(i2, take_until!("\n"));
     let (i4, _) = try_parse!(i3, tag!("\n"));
-    IResult::Done(i4,
-                  (key.to_vec(), String::from_utf8(val.to_vec()).expect("not UTF8")))
+    IResult::Done(i4, (key.to_vec(), AsciiBytes(val.to_vec()).decode()))
 }
 
 fn pbody(input: &[u8]) -> IResult<&[u8], Option<MessageBody>> {
@@ -125,7 +204,7 @@ fn pbody(input: &[u8]) -> IResult<&[u8], Option<MessageBody>> {
             let (i3, b0) = try_parse!(i2, tag!("\0"));
             let mut bvec = body.to_vec();
             bvec.extend(b0);
-            return IResult::Done(i3, Some(MessageBody(bvec)));
+            return IResult::Done(i3, Some(MessageBody(AsciiBytes(bvec))));
         }
         _ => IResult::Done(i1, None),
     }
@@ -202,7 +281,7 @@ fn parse_basic() {
                       name: b"foo".to_vec(),
                       argument: Some(b"bar".to_vec()),
                       attrs: vec![(b"baz".to_vec(), String::from("qux"))].into_iter().collect(),
-                      body: Some(MessageBody(b"this is the body\0".to_vec())),
+                      body: Some(MessageBody(AsciiBytes(b"this is the body\0".to_vec()))),
                   }));
 }
 
@@ -252,10 +331,7 @@ fn parse_no_arg() {
 
 #[test]
 fn parse_sub() {
-    let msg = parse(b"foo\n\na=b\nc=d\n\0")
-        .expect("oh no")
-        .body
-        .expect("no body");
+    let msg = Message::from("foo\n\na=b\nc=d\n\0").body.expect("no body");
     assert_eq!(msg.submessage(),
                Ok(SubMessage {
                       name: None,

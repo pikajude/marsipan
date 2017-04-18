@@ -6,3 +6,5 @@ authors = ["Jude Taylor <me@jude.bio>"]
 [dependencies]
 nom = "^2.2"
 ansi_term = "0.9"
+htmlescape = "*"
+log = "*"
