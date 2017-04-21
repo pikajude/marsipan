@@ -105,11 +105,15 @@ impl From<String> for MessageBody {
     fn from(s: String) -> Self {
         let mut bytes = vec![];
         for c in s.chars() {
-            let ord = c as u32;
-            if ord <= 127 {
-                bytes.push(ord as u8);
+            if c == '&' {
+                bytes.extend("&amp;".as_bytes());
             } else {
-                bytes.extend(format!("&#x{:x};", ord).as_bytes())
+                let ord = c as u32;
+                if ord <= 127 {
+                    bytes.push(ord as u8);
+                } else {
+                    bytes.extend(format!("&#x{:x};", ord).as_bytes())
+                }
             }
         }
         debug!("{:?}", bytes);

@@ -1,19 +1,12 @@
 use damnpacket::Message;
 use damnpacket::MessageIsh;
+use hooks::{Hooks,Updates};
 use messagequeue::MessageQueue;
 use std::collections::HashMap;
-use std::collections::hash_map::Values;
 use event::{Event,EType};
-use std::sync::atomic::{AtomicUsize,ATOMIC_USIZE_INIT,Ordering};
 use std::convert::TryFrom;
-use std::cell::RefCell;
-use std::rc::Rc;
-use commands;
-use commands::Command;
 
-static TRIGGERS: [&'static str; 2] = ["!", "participle: "];
-
-type Callback = fn(Message, MessageQueue, Hooks);
+type Callback = fn(Message, MessageQueue, &mut Hooks);
 
 lazy_static! {
     pub static ref ACTIONS: HashMap<&'static [u8], Callback> = {
@@ -26,91 +19,15 @@ lazy_static! {
     };
 }
 
-static UNIQUE: AtomicUsize = ATOMIC_USIZE_INIT;
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub struct M(usize);
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub struct J(usize);
-
-fn new_unique() -> usize {
-    UNIQUE.fetch_add(1, Ordering::SeqCst)
-}
-
-struct H {
-    msg: HashMap<M, Command>,
-    join: HashMap<J, Command>,
-}
-
-enum Update {
-    AddMessage(M, Command),
-    AddJoin(J, Command),
-    DropMessage(M),
-    DropJoin(J),
-}
-
-#[derive(Clone)]
-pub struct Hooks(Rc<RefCell<H>>);
-
-impl Hooks {
-    pub fn new() -> Self {
-        Hooks(Rc::new(RefCell::new(H {
-            msg: HashMap::new(),
-            join: HashMap::new(),
-        })))
-    }
-
-    pub fn add_command(self, s: &'static str, cb: Command) -> M {
-        fn matches(ev: &Event, cmd: &str) -> bool {
-            for t in TRIGGERS.iter() {
-                if ev.message.starts_with(t) {
-                    if (&ev.message[t.len()..]).starts_with(cmd) {
-                        return true
-                    }
-                }
-            }
-            false
-        }
-
-        let u = M(new_unique());
-        self.0.borrow_mut().msg.insert(u, Box::new(move |ev|
-            if matches(&ev, s) {
-                cb(ev)
-            }
-        ));
-        u
-    }
-
-    pub fn add_msg(self, c: Command) -> M {
-        let u = M(new_unique());
-        self.0.borrow_mut().msg.insert(u, c);
-        u
-    }
-
-    fn add_join(self, c: Command) -> J {
-        let u = J(new_unique());
-        self.0.borrow_mut().join.insert(u, c);
-        u
-    }
-
-    fn remove(self, u: M) {
-        self.0.borrow_mut().msg.remove(&u);
-    }
-
-    fn remove_join(self, u: J) {
-        self.0.borrow_mut().join.remove(&u);
-    }
-}
-
-fn respond_ping(_: Message, mq: MessageQueue, _: Hooks) {
+fn respond_ping(_: Message, mq: MessageQueue, _: &mut Hooks) {
     mq.push(Message::from("pong\n\0"));
 }
 
-fn respond_damnserver(_: Message, mq: MessageQueue, _: Hooks) {
+fn respond_damnserver(_: Message, mq: MessageQueue, _: &mut Hooks) {
     mq.push(Message::from(concat!("login participle\npk=", env!("PK"), "\n\0")));
 }
 
-fn respond_login(msg: Message, mq: MessageQueue, _: Hooks) {
+fn respond_login(msg: Message, mq: MessageQueue, _: &mut Hooks) {
     match msg.get_attr(&b"e"[..]) {
         Some("ok") => {
             info!("Logged in successfully");
@@ -121,19 +38,19 @@ fn respond_login(msg: Message, mq: MessageQueue, _: Hooks) {
     };
 }
 
-fn respond_recv(msg: Message, mq: MessageQueue, h: Hooks) {
-    if let Ok(ev) = Event::try_from((&msg, mq, h.clone())) {
-        match ev.ty {
-            EType::Join => for cmd in h.0.borrow().join.values() {
+fn respond_recv(msg: Message, mq: MessageQueue, h: &mut Hooks) {
+    if let Ok(ev) = Event::try_from((&msg, mq)) {
+        let updates = match ev.ty {
+            EType::Join => h.join_iter().flat_map(|cmd| {
                 cmd(ev.clone())
+            }).collect::<Updates>(),
+            EType::Part => {
+                vec![]
             },
-            EType::Part => do_part_hook(ev),
-            _ => for cmd in h.0.borrow().msg.values() {
+            _ => h.msg_iter().flat_map(|cmd| {
                 cmd(ev.clone())
-            }
-        }
+            }).collect::<Updates>()
+        };
+        h.apply(updates);
     }
 }
-
-fn do_join_hook(_: Event) {  }
-fn do_part_hook(_: Event) {  }

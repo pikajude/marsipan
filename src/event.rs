@@ -2,9 +2,6 @@ use damnpacket::{Message,MessageBody};
 use std::convert::TryFrom;
 use std::collections::HashMap;
 use messagequeue::MessageQueue;
-use commands::Command;
-use handler::{Hooks,M};
-use std::ops::Deref;
 
 #[derive(Debug, Clone)]
 pub enum EType {
@@ -19,14 +16,14 @@ pub struct Event {
     pub message: String,
 
     mq: MessageQueue,
-    updates: Vec<Update>,
+    // updates: Vec<Update>,
 }
 
-impl<'a> TryFrom<(&'a Message, MessageQueue, Hooks)> for Event {
+impl<'a> TryFrom<(&'a Message, MessageQueue)> for Event {
     type Error = ();
 
-    fn try_from(arg: (&'a Message, MessageQueue, Hooks)) -> Result<Self, ()> {
-        let (msg, mq, hs) = arg;
+    fn try_from(arg: (&'a Message, MessageQueue)) -> Result<Self, ()> {
+        let (msg, mq) = arg;
         let chatroom = msg.argument.clone();
         for sub in msg.submessage().into_iter() {
             let sender = sub.argument.clone();
@@ -40,7 +37,6 @@ impl<'a> TryFrom<(&'a Message, MessageQueue, Hooks)> for Event {
                     sender: sender.expect("invariant: recv msg, no sender"),
                     message: sub.body.map(|x|x.to_string()).unwrap_or("".to_string()),
                     mq: mq,
-                    hooks: hs,
                 }),
                 Some(b"action") => Ok(Event {
                     ty: EType::Action,
@@ -48,7 +44,6 @@ impl<'a> TryFrom<(&'a Message, MessageQueue, Hooks)> for Event {
                     sender: sender.expect("invariant: recv action, no sender"),
                     message: sub.body.map(|x|x.to_string()).unwrap_or("".to_string()),
                     mq: mq,
-                    hooks: hs,
                 }),
                 Some(b"join") => Ok(Event {
                     ty: EType::Join,
@@ -56,7 +51,6 @@ impl<'a> TryFrom<(&'a Message, MessageQueue, Hooks)> for Event {
                     sender: sender.expect("invariant: recv join, no sender"),
                     message: "".to_string(),
                     mq: mq,
-                    hooks: hs,
                 }),
                 Some(b"part") => Ok(Event {
                     ty: EType::Part,
@@ -64,7 +58,6 @@ impl<'a> TryFrom<(&'a Message, MessageQueue, Hooks)> for Event {
                     sender: sender.expect("invariant: recv part, no sender"),
                     message: "".to_string(),
                     mq: mq,
-                    hooks: hs,
                 }),
                 _ => Err(())
             }
@@ -84,7 +77,11 @@ impl Event {
         })
     }
 
-    pub fn add_msg(&mut self, c: Command) -> M {
-        self.hooks.clone().add_msg(c)
+    pub fn respond_highlight<S>(&self, msg: S)
+        where S: Into<String> {
+        self.respond(format!("{}: {}",
+            // dA enforces that names are ascii so this is OK
+            ::std::str::from_utf8(self.sender.as_slice()).unwrap(),
+            msg.into()))
     }
 }
