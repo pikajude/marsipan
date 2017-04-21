@@ -19,7 +19,7 @@ pub struct Event {
     pub message: String,
 
     mq: MessageQueue,
-    pub hooks: Hooks,
+    updates: Vec<Update>,
 }
 
 impl<'a> TryFrom<(&'a Message, MessageQueue, Hooks)> for Event {
@@ -84,7 +84,7 @@ impl Event {
         })
     }
 
-    pub fn add_msg(&self, c: Command) -> M {
+    pub fn add_msg(&mut self, c: Command) -> M {
         self.hooks.clone().add_msg(c)
     }
 }

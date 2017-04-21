@@ -42,6 +42,13 @@ struct H {
     join: HashMap<J, Command>,
 }
 
+enum Update {
+    AddMessage(M, Command),
+    AddJoin(J, Command),
+    DropMessage(M),
+    DropJoin(J),
+}
+
 #[derive(Clone)]
 pub struct Hooks(Rc<RefCell<H>>);
 
