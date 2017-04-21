@@ -101,6 +101,22 @@ pub trait MessageIsh {
     fn body_(&self) -> &MessageBody;
 }
 
+impl From<String> for MessageBody {
+    fn from(s: String) -> Self {
+        let mut bytes = vec![];
+        for c in s.chars() {
+            let ord = c as u32;
+            if ord <= 127 {
+                bytes.push(ord as u8);
+            } else {
+                bytes.extend(format!("&#x{:x};", ord).as_bytes())
+            }
+        }
+        debug!("{:?}", bytes);
+        MessageBody(AsciiBytes(bytes))
+    }
+}
+
 impl Message {
     pub fn submessage(&self) -> Option<SubMessage> {
         match self.body {

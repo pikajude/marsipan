@@ -124,15 +124,15 @@ impl MQ {
 }
 
 impl MessageQueue {
-    pub fn push(self, msg: Message) {
+    pub fn push(&self, msg: Message) {
         self.0.borrow_mut().push(msg)
     }
 
-    pub fn schedule(self, msg: Message, d: Duration) {
+    pub fn schedule(&self, msg: Message, d: Duration) {
         self.0.borrow_mut().schedule(msg, d)
     }
 
-    pub fn schedule_at(self, msg: Message, ins: Instant) {
+    pub fn schedule_at(&self, msg: Message, ins: Instant) {
         self.0.borrow_mut().schedule_at(msg, ins)
     }
 

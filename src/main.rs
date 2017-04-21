@@ -1,4 +1,4 @@
-#![allow(non_snake_case)]
+#![feature(try_from)]
 
 extern crate ansi_term;
 extern crate bytes;
@@ -18,6 +18,7 @@ use damnpacket::Message;
 use futures::future::Future;
 use futures::{Stream, Sink};
 use std::io::BufRead;
+use handler::Hooks;
 use std::io;
 use std::net::{SocketAddr,ToSocketAddrs};
 use tokio_core::net::TcpStream;
@@ -27,6 +28,8 @@ use env_logger::LogBuilder;
 use std::env;
 
 pub mod codec;
+pub mod commands;
+pub mod event;
 pub mod handler;
 pub mod messagequeue;
 
@@ -85,6 +88,9 @@ fn repeatedly(h: &Handle, addr: &SocketAddr) {
     let h2 = h.clone();
     let mq = MessageQueue::new(&h);
     let mq2 = mq.clone();
+    let hooks = Hooks::new();
+    let hooks2 = hooks.clone();
+    hooks.add_command("ping", Box::new(commands::cmd_ping));
     h.spawn(TcpStream::connect(&addr, &h).then(|res|
         match res {
             Ok(stream) => Ok(stream.framed(DamnCodec).split()),
@@ -95,7 +101,7 @@ fn repeatedly(h: &Handle, addr: &SocketAddr) {
             rx.and_then(move |item| {
                 dump(&item, true);
                 match ACTIONS.get(&item.name[..]) {
-                    Some(f) => f(item, mq.clone()),
+                    Some(f) => f(item, mq.clone(), hooks2.clone()),
                     _ => debug!("unknown message")
                 };
                 Ok(None)
