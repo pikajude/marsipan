@@ -1,12 +1,12 @@
 use damnpacket::Message;
 use damnpacket::MessageIsh;
-use hooks::{Hooks,Updates};
+use hooks::{Hooks,HookStorage};
 use messagequeue::MessageQueue;
 use std::collections::HashMap;
 use event::{Event,EType};
 use std::convert::TryFrom;
 
-type Callback = fn(Message, MessageQueue, &mut Hooks);
+type Callback = fn(Message, MessageQueue, &mut HookStorage);
 
 lazy_static! {
     pub static ref ACTIONS: HashMap<&'static [u8], Callback> = {
@@ -19,15 +19,15 @@ lazy_static! {
     };
 }
 
-fn respond_ping(_: Message, mq: MessageQueue, _: &mut Hooks) {
+fn respond_ping(_: Message, mq: MessageQueue, _: &mut HookStorage) {
     mq.push(Message::from("pong\n\0"));
 }
 
-fn respond_damnserver(_: Message, mq: MessageQueue, _: &mut Hooks) {
+fn respond_damnserver(_: Message, mq: MessageQueue, _: &mut HookStorage) {
     mq.push(Message::from(concat!("login participle\npk=", env!("PK"), "\n\0")));
 }
 
-fn respond_login(msg: Message, mq: MessageQueue, _: &mut Hooks) {
+fn respond_login(msg: Message, mq: MessageQueue, _: &mut HookStorage) {
     match msg.get_attr(&b"e"[..]) {
         Some("ok") => {
             info!("Logged in successfully");
@@ -38,18 +38,18 @@ fn respond_login(msg: Message, mq: MessageQueue, _: &mut Hooks) {
     };
 }
 
-fn respond_recv(msg: Message, mq: MessageQueue, h: &mut Hooks) {
+fn respond_recv(msg: Message, mq: MessageQueue, h: &mut HookStorage) {
     if let Ok(ev) = Event::try_from((&msg, mq)) {
         let updates = match ev.ty {
             EType::Join => h.join_iter().flat_map(|cmd| {
                 cmd(ev.clone())
-            }).collect::<Updates>(),
+            }).collect::<Hooks>(),
             EType::Part => {
                 vec![]
             },
             _ => h.msg_iter().flat_map(|cmd| {
                 cmd(ev.clone())
-            }).collect::<Updates>()
+            }).collect::<Hooks>()
         };
         h.apply(updates);
     }

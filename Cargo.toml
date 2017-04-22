@@ -5,6 +5,7 @@ authors = ["Jude Taylor <me@jude.bio>"]
 
 [dependencies]
 damnpacket = { path = "damnpacket" }
+rustc_version_runtime = "*"
 tokio-proto = "0.1"
 env_logger = "*"
 log = "*"

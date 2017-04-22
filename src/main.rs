@@ -1,4 +1,5 @@
 #![feature(try_from)]
+#![feature(box_syntax)]
 
 extern crate ansi_term;
 extern crate bytes;
@@ -70,9 +71,9 @@ impl From<futures::sync::mpsc::SendError<damnpacket::Message>> for MarsError {
 
 fn dump(it: &damnpacket::Message, direction: bool) {
     let prefix = if direction {
-        Colour::Fixed(11).paint("⟹  ")
+        Colour::Fixed(11).paint("\u{27f9} ")
     } else {
-        Colour::Fixed(13).paint("⟸  ")
+        Colour::Fixed(13).paint("\u{27f8} ")
     };
     let mut output = vec![];
     it.pretty(&mut output).unwrap();
@@ -95,7 +96,7 @@ fn repeatedly(h: &Handle, addr: &SocketAddr) {
         }
     ).and_then(|(tx, rx)|
         tx.send(greeting).and_then(|writer| {
-            let hooks = ::std::cell::RefCell::new(hooks::Hooks::new());
+            let hooks = ::std::cell::RefCell::new(hooks::HookStorage::new());
             hooks.borrow_mut().apply(commands::default_cmds());
             rx.and_then(move |item| {
                 dump(&item, true);

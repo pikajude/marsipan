@@ -5,20 +5,16 @@ use event::Event;
 
 static TRIGGERS: [&'static str; 2] = ["!", "participle: "];
 
-pub type Command = Box<Fn(Event) -> Updates + Send>;
+pub type Command = Box<Fn(Event) -> Hooks + Send>;
 
-pub struct Hooks {
+pub struct HookStorage {
     msg: HashMap<M, Command>,
     join: HashMap<J, Command>,
 }
 
-pub fn new_unique() -> usize {
-    UNIQUE.fetch_add(1, Ordering::SeqCst)
-}
-
-impl Hooks {
+impl HookStorage {
     pub fn new() -> Self {
-        Hooks {
+        HookStorage {
             msg: HashMap::new(),
             join: HashMap::new(),
         }
@@ -36,13 +32,13 @@ impl Hooks {
             false
         }
 
-        self.msg.insert(u, Box::new(move |ev|
+        self.msg.insert(u, box move |ev|
             if matches(&ev, s) {
                 cb(ev)
             } else {
                 vec![]
             }
-        ));
+        );
         u
     }
 
@@ -54,12 +50,12 @@ impl Hooks {
         self.msg.values()
     }
 
-    pub fn apply(&mut self, updates: Updates) {
+    pub fn apply(&mut self, updates: Hooks) {
         for up in updates.into_iter() {
             match up {
-                Hook::AddMessage(m, c) => {self.msg.insert(m, c);},
-                Hook::AddCommand(m, s, c) => {self.add_command(m, s, c);}
-                Hook::AddJoin(j, c) => {self.join.insert(j, c);},
+                Hook::AddMessage(m,c) => {self.msg.insert(m,c);},
+                Hook::AddCommand(m,s,c) => {self.add_command(m,s,c);}
+                Hook::AddJoin(j,c) => {self.join.insert(j,c);},
                 Hook::DropMessage(m) => {self.msg.remove(&m);},
                 Hook::DropJoin(j) => {self.join.remove(&j);},
             }
@@ -69,10 +65,26 @@ impl Hooks {
 
 static UNIQUE: AtomicUsize = ATOMIC_USIZE_INIT;
 
+fn new_unique() -> usize {
+    UNIQUE.fetch_add(1, Ordering::SeqCst)
+}
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct M(usize);
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct J(usize);
+
+impl M {
+    pub fn next() -> Self {
+        M(new_unique())
+    }
+}
+
+impl J {
+    pub fn next() -> Self {
+        J(new_unique())
+    }
+}
 
 pub enum Hook {
     AddMessage(M, Command),
@@ -82,18 +94,18 @@ pub enum Hook {
     DropJoin(J),
 }
 
-pub type Updates = Vec<Hook>;
+pub type Hooks = Vec<Hook>;
 
 impl Hook {
     pub fn register<F>(s: &'static str, f: F) -> Self
         where F: FnOnce(M) -> Command {
-        let m = M(new_unique());
+        let m = M::next();
         Hook::AddCommand(m, s, f(m))
     }
 
     pub fn register_msg<F>(f: F) -> Self
         where F: FnOnce(M) -> Command {
-        let m = M(new_unique());
+        let m = M::next();
         Hook::AddMessage(m, f(m))
     }
 

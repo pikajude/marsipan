@@ -1,10 +1,18 @@
-use hooks::{Command,Hook,Updates};
+use hooks::{Command,Hook,Hooks};
 
+pub mod about;
+pub mod foobar;
 pub mod ping;
 pub mod prelude;
 
-pub fn default_cmds() -> Updates {
+macro_rules! cmd {
+    ($e:expr) => { |_| box $e as Command };
+}
+
+pub fn default_cmds() -> Hooks {
     vec![
-        Hook::register("ping", |_| Box::new(ping::ping) as Command),
+        Hook::register("ping", cmd!(ping::ping)),
+        Hook::register("about", cmd!(about::about)),
+        Hook::register("foo", foobar::foo),
     ]
 }
