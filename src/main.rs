@@ -41,7 +41,7 @@ use messagequeue::MessageQueue;
 #[derive(Debug)]
 pub enum MarsError {
     Io(io::Error),
-    Parse(nom::ErrorKind),
+    Parse(String),
     Fut(futures::sync::mpsc::SendError<Message>),
 }
 
@@ -57,9 +57,9 @@ impl From<io::Error> for MarsError {
     }
 }
 
-impl From<nom::ErrorKind> for MarsError {
-    fn from(e: nom::ErrorKind) -> Self {
-        MarsError::Parse(e)
+impl<'a> From<nom::Err<&'a [u8]>> for MarsError {
+    fn from(e: nom::Err<&'a [u8]>) -> Self {
+        MarsError::Parse(format!("{:?}", e))
     }
 }
 

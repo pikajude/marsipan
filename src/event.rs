@@ -1,4 +1,4 @@
-use damnpacket::{Message,MessageBody};
+use damnpacket::{Message,MessageBody,MessageIsh};
 use std::convert::TryFrom;
 use std::collections::HashMap;
 use messagequeue::MessageQueue;
@@ -26,36 +26,32 @@ impl<'a> TryFrom<(&'a Message, MessageQueue)> for Event {
         let (msg, mq) = arg;
         let chatroom = msg.argument.clone();
         for sub in msg.submessage().into_iter() {
-            let sender = sub.argument.clone();
-            if sender == Some(b"participle".to_vec()) {
-                return Err(())
-            }
             return match sub.name.as_ref().map(|x|x.as_slice()) {
                 Some(b"msg") => Ok(Event {
                     ty: EType::Message,
                     chatroom: chatroom.expect("invariant: recv msg, no chatroom"),
-                    sender: sender.expect("invariant: recv msg, no sender"),
+                    sender: sub.get_attr("from").expect("invariant: recv msg, no sender").as_bytes().to_vec(),
                     message: sub.body.map(|x|x.to_string()).unwrap_or("".to_string()),
                     mq: mq,
                 }),
                 Some(b"action") => Ok(Event {
                     ty: EType::Action,
                     chatroom: chatroom.expect("invariant: recv action, no chatroom"),
-                    sender: sender.expect("invariant: recv action, no sender"),
+                    sender: sub.get_attr("from").expect("invariant: recv action, no sender").as_bytes().to_vec(),
                     message: sub.body.map(|x|x.to_string()).unwrap_or("".to_string()),
                     mq: mq,
                 }),
                 Some(b"join") => Ok(Event {
                     ty: EType::Join,
                     chatroom: chatroom.expect("invariant: recv join, no chatroom"),
-                    sender: sender.expect("invariant: recv join, no sender"),
+                    sender: sub.argument.clone().expect("invariant: recv join, no sender"),
                     message: "".to_string(),
                     mq: mq,
                 }),
                 Some(b"part") => Ok(Event {
                     ty: EType::Part,
                     chatroom: chatroom.expect("invariant: recv part, no chatroom"),
-                    sender: sender.expect("invariant: recv part, no sender"),
+                    sender: sub.argument.clone().expect("invariant: recv part, no sender"),
                     message: "".to_string(),
                     mq: mq,
                 }),

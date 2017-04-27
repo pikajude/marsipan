@@ -8,6 +8,7 @@ use nom::*;
 use std::collections::HashMap;
 use std::io;
 
+#[macro_use]
 pub mod tablumps;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -47,12 +48,12 @@ impl AsciiBytes {
                     tablumps::render(toks)
                 } else {
                     warn!("Tablump extra garbage: {:?}", y);
-                    slice.iter().map(|&c| c as char).collect()
+                    string!(slice)
                 }
             },
             x => {
                 warn!("Tablump error: {:?}", x);
-                slice.iter().map(|&c| c as char).collect()
+                string!(slice)
             }
         }
         // match htmlescape::decode_html(intermediate.as_str()) {
@@ -310,73 +311,73 @@ pub fn parse<'a>(bs: &[u8]) -> Result<Message, nom::Err<&[u8]>> {
     }
 }
 
-// #[test]
-// fn parse_basic() {
-//     assert_eq!(parse(b"foo bar\nbaz=qux\n\nthis is the body\0"),
-//                Ok(Message {
-//                       name: b"foo".to_vec(),
-//                       argument: Some(b"bar".to_vec()),
-//                       attrs: vec![(b"baz".to_vec(), String::from("qux"))].into_iter().collect(),
-//                       body: Some(MessageBody(AsciiBytes(b"this is the body\0".to_vec()))),
-//                   }));
-// }
-// 
-// #[test]
-// fn parse_no_body() {
-//     assert_eq!(parse(b"foo bar\nbaz=qux\n\0"),
-//                Ok(Message {
-//                       name: b"foo".to_vec(),
-//                       argument: Some(b"bar".to_vec()),
-//                       attrs: vec![(b"baz".to_vec(), String::from("qux"))].into_iter().collect(),
-//                       body: None,
-//                   }));
-// }
-// 
-// #[test]
-// fn parse_empty_attr() {
-//     assert_eq!(parse(b"foo\nbaz=\n\0"),
-//         Ok(Message {
-//             name: b"foo".to_vec(),
-//             argument: None,
-//             attrs: vec![(b"baz".to_vec(), String::from(""))].into_iter().collect(),
-//             body: None,
-//         }))
-// }
-// 
-// #[test]
-// fn parse_no_attrs() {
-//     assert_eq!(parse(b"foo bar\n\0"),
-//                Ok(Message {
-//                       name: b"foo".to_vec(),
-//                       argument: Some(b"bar".to_vec()),
-//                       attrs: HashMap::new(),
-//                       body: None,
-//                   }));
-// }
-// 
-// #[test]
-// fn parse_no_arg() {
-//     assert_eq!(parse(b"foo\n\0"),
-//                Ok(Message {
-//                       name: b"foo".to_vec(),
-//                       argument: None,
-//                       attrs: HashMap::new(),
-//                       body: None,
-//                   }));
-// }
-// 
-// #[test]
-// fn parse_sub() {
-//     let msg = Message::from("foo\n\na=b\nc=d\n\0").body.expect("no body");
-//     assert_eq!(msg.submessage(),
-//                Ok(SubMessage {
-//                       name: None,
-//                       argument: None,
-//                       attrs: vec![(b"a".to_vec(), String::from("b")),
-//                                   (b"c".to_vec(), String::from("d"))].into_iter().collect(),
-//                       body: None,
-//                   }))
-// }
+#[test]
+fn parse_basic() {
+    assert_eq!(parse(b"foo bar\nbaz=qux\n\nthis is the body\0"),
+               Ok(Message {
+                      name: b"foo".to_vec(),
+                      argument: Some(b"bar".to_vec()),
+                      attrs: vec![(b"baz".to_vec(), String::from("qux"))].into_iter().collect(),
+                      body: Some(MessageBody(AsciiBytes(b"this is the body\0".to_vec()))),
+                  }));
+}
+
+#[test]
+fn parse_no_body() {
+    assert_eq!(parse(b"foo bar\nbaz=qux\n\0"),
+               Ok(Message {
+                      name: b"foo".to_vec(),
+                      argument: Some(b"bar".to_vec()),
+                      attrs: vec![(b"baz".to_vec(), String::from("qux"))].into_iter().collect(),
+                      body: None,
+                  }));
+}
+
+#[test]
+fn parse_empty_attr() {
+    assert_eq!(parse(b"foo\nbaz=\n\0"),
+        Ok(Message {
+            name: b"foo".to_vec(),
+            argument: None,
+            attrs: vec![(b"baz".to_vec(), String::from(""))].into_iter().collect(),
+            body: None,
+        }))
+}
+
+#[test]
+fn parse_no_attrs() {
+    assert_eq!(parse(b"foo bar\n\0"),
+               Ok(Message {
+                      name: b"foo".to_vec(),
+                      argument: Some(b"bar".to_vec()),
+                      attrs: HashMap::new(),
+                      body: None,
+                  }));
+}
+
+#[test]
+fn parse_no_arg() {
+    assert_eq!(parse(b"foo\n\0"),
+               Ok(Message {
+                      name: b"foo".to_vec(),
+                      argument: None,
+                      attrs: HashMap::new(),
+                      body: None,
+                  }));
+}
+
+#[test]
+fn parse_sub() {
+    let msg = Message::from("foo\n\na=b\nc=d\n\0").body.expect("no body");
+    assert_eq!(msg.submessage(),
+               Ok(SubMessage {
+                      name: None,
+                      argument: None,
+                      attrs: vec![(b"a".to_vec(), String::from("b")),
+                                  (b"c".to_vec(), String::from("d"))].into_iter().collect(),
+                      body: None,
+                  }))
+}
 
 #[test]
 fn parse_lumps() {
