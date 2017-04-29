@@ -1,8 +1,8 @@
 use hooks::{Command,Hook,Hooks};
 
 mod about;
+mod commands;
 mod echo;
-mod foobar;
 mod ping;
 mod prelude;
 
@@ -10,10 +10,19 @@ macro_rules! cmd {
     ($e:expr) => { |_| box $e as Command };
 }
 
+macro_rules! cmds {
+    ($($e:expr => $f:expr),*) => {
+        static CMD_NAMES: &'static [&'static str] = &[$($e,)*];
+
+        vec![$(Hook::register($e, $f),)*]
+    }
+}
+
 pub fn default_cmds() -> Hooks {
-    vec![
-        Hook::register("ping", cmd!(ping::ping)),
-        Hook::register("about", cmd!(about::about)),
-        Hook::register("echo", cmd!(echo::echo)),
-    ]
+    cmds! {
+        "about" => cmd!(about::about),
+        "commands" => |_| commands::commands(CMD_NAMES),
+        "echo" => cmd!(echo::echo),
+        "ping" => cmd!(ping::ping)
+    }
 }
