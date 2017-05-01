@@ -11,10 +11,10 @@ macro_rules! cmd {
 }
 
 macro_rules! cmds {
-    ($($e:expr => $f:expr),*) => {
-        static CMD_NAMES: &'static [&'static str] = &[$($e,)*];
+    ($($e:expr => $f:expr),+) => {
+        static CMD_NAMES: &'static [&'static str] = &[$($e,)+];
 
-        vec![$(Hook::register($e, $f),)*]
+        vec![$(Hook::register($e, $f),)+]
     }
 }
 

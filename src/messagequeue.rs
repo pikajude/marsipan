@@ -3,12 +3,10 @@ use futures::Future;
 use futures::Stream;
 use futures::task;
 use std::cell::RefCell;
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::time::Duration;
 use std::time::Instant;
-use std::ops::Deref;
 use tokio_core::reactor::Handle;
 use tokio_core::reactor::Timeout;
 
@@ -16,51 +14,31 @@ use damnpacket::Message;
 use futures;
 use MarsError;
 
-#[derive(Debug)]
-pub struct Countdown<A> {
-    stamp: Instant,
-    value: A,
-}
-
-impl<A> Countdown<A> {
-    fn at(instant: Instant, value: A) -> Self {
-        Countdown { stamp: instant, value: value }
-    }
-}
-
-impl<A> Deref for Countdown<A> {
-    type Target = A;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl<A> PartialEq for Countdown<A> {
-    fn eq(&self, other: &Self) -> bool {
-        self.stamp.eq(&other.stamp)
-    }
-}
-
-impl<A> Eq for Countdown<A> {}
-
-/// Countdown orders in reverse so the heap becomes a min-heap instead of a max-heap.
-impl<A> PartialOrd for Countdown<A> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<A> Ord for Countdown<A> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        other.stamp.cmp(&self.stamp)
-    }
-}
-
 struct MQ {
-    heap: BinaryHeap<Countdown<Message>>,
+    heap: FakeHeap<Instant, Message>,
     timeout: Option<Timeout>,
     handle: Handle
+}
+
+struct FakeHeap<K,V> {
+    _map: BTreeMap<K,V>
+}
+
+impl<K,V> FakeHeap<K,V> where K: Ord {
+    fn insert(&mut self, k: K, v: V) -> Option<V> {
+        self._map.insert(k,v)
+    }
+
+    fn peek(&self) -> Option<&K> {
+        self._map.keys().next()
+    }
+
+    fn pop(&mut self) -> Option<(K, V)> where K: Clone + Copy {
+        if let Some(k) = self.peek().cloned() {
+            return Some((k, self._map.remove(&k).unwrap()))
+        }
+        None
+    }
 }
 
 #[derive(Clone)]
@@ -69,7 +47,9 @@ pub struct MessageQueue(Rc<RefCell<MQ>>);
 impl MQ {
     fn new(h: &Handle) -> Self {
         MQ {
-            heap: BinaryHeap::new(),
+            heap: FakeHeap {
+                _map: BTreeMap::new()
+            },
             timeout: None,
             handle: h.clone()
         }
@@ -84,17 +64,17 @@ impl MQ {
     }
 
     fn schedule_at(&mut self, msg: Message, ins: Instant) {
-        self.heap.push(Countdown::at(ins, msg));
+        self.heap.insert(ins, msg);
         self.reschedule();
     }
 
     fn reschedule(&mut self) {
-        if let Some(soonest) = self.heap.peek() {
+        if let Some(stamp) = self.heap.peek().cloned() {
             let i = Instant::now();
-            self.timeout = Some(Timeout::new(if soonest.stamp < i {
+            self.timeout = Some(Timeout::new(if stamp < i {
                 Duration::new(0,0)
             } else {
-                soonest.stamp - i
+                stamp - i
             }, &self.handle).unwrap());
             task::park().unpark();
         } else {
@@ -109,7 +89,7 @@ impl MQ {
             Some(ref mut t) => match t.poll() {
                 Ok(Async::Ready(_)) => {
                     removed_item = true;
-                    let soonest = self.heap.pop().expect("Invariant: timeout with empty heap").value;
+                    let soonest = self.heap.pop().expect("Invariant: timeout with empty heap").1;
                     Ok(Async::Ready(Some(soonest)))
                 },
                 Ok(Async::NotReady) => Ok(Async::NotReady),

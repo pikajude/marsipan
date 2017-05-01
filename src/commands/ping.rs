@@ -10,9 +10,9 @@ pub fn ping(e: Event) -> Hooks {
             let ms = (diff.subsec_nanos().checked_div(1000000).unwrap() as u64)
                 + diff.as_secs() * 1000;
             e.respond(format!("\u{1f514}! ({}ms)", ms));
-            vec![Hook::unregister(m)]
-        } else {
-            vec![]
+            return vec![Hook::unregister(m)];
         }
+
+        vec![]
     })]
 }
