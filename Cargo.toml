@@ -16,6 +16,10 @@ bytes = "0.4"
 futures = "*"
 ansi_term = "*"
 lazy_static = "0.2"
+diesel = { version = "*", features = ["sqlite"] }
+diesel_codegen = { version = "*", features = ["sqlite"] }
+dotenv = "*"
+libsqlite3-sys = { version = "=0.7.1", optional = true }
 
 [dependencies.nom]
 version = "*"

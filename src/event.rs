@@ -1,7 +1,11 @@
 use damnpacket::{Message,MessageBody,MessageIsh};
-use std::convert::TryFrom;
-use std::collections::HashMap;
+use diesel::sqlite::SqliteConnection;
 use messagequeue::MessageQueue;
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::time::{Duration,Instant};
+use std::rc::Rc;
+use diesel::LoadDsl;
 
 #[derive(Debug, Clone)]
 pub enum EType {
@@ -15,15 +19,17 @@ pub struct Event {
     pub sender: Vec<u8>,
     pub message: String,
 
+    connection: Rc<SqliteConnection>,
+
     mq: MessageQueue,
     // updates: Vec<Update>,
 }
 
-impl<'a> TryFrom<(&'a Message, MessageQueue)> for Event {
+impl<'a> TryFrom<(&'a Message, Rc<SqliteConnection>, MessageQueue)> for Event {
     type Error = ();
 
-    fn try_from(arg: (&'a Message, MessageQueue)) -> Result<Self, ()> {
-        let (msg, mq) = arg;
+    fn try_from(arg: (&'a Message, Rc<SqliteConnection>, MessageQueue)) -> Result<Self, ()> {
+        let (msg, conn, mq) = arg;
         let chatroom = msg.argument.clone();
         for sub in msg.submessage().into_iter() {
             return match sub.name.as_ref().map(|x|x.as_slice()) {
@@ -32,6 +38,7 @@ impl<'a> TryFrom<(&'a Message, MessageQueue)> for Event {
                     chatroom: chatroom.expect("invariant: recv msg, no chatroom"),
                     sender: sub.get_attr("from").expect("invariant: recv msg, no sender").as_bytes().to_vec(),
                     message: sub.body.map(|x|x.to_string()).unwrap_or("".to_string()),
+                    connection: conn,
                     mq: mq,
                 }),
                 Some(b"action") => Ok(Event {
@@ -39,6 +46,7 @@ impl<'a> TryFrom<(&'a Message, MessageQueue)> for Event {
                     chatroom: chatroom.expect("invariant: recv action, no chatroom"),
                     sender: sub.get_attr("from").expect("invariant: recv action, no sender").as_bytes().to_vec(),
                     message: sub.body.map(|x|x.to_string()).unwrap_or("".to_string()),
+                    connection: conn,
                     mq: mq,
                 }),
                 Some(b"join") => Ok(Event {
@@ -46,6 +54,7 @@ impl<'a> TryFrom<(&'a Message, MessageQueue)> for Event {
                     chatroom: chatroom.expect("invariant: recv join, no chatroom"),
                     sender: sub.argument.clone().expect("invariant: recv join, no sender"),
                     message: "".to_string(),
+                    connection: conn,
                     mq: mq,
                 }),
                 Some(b"part") => Ok(Event {
@@ -53,6 +62,7 @@ impl<'a> TryFrom<(&'a Message, MessageQueue)> for Event {
                     chatroom: chatroom.expect("invariant: recv part, no chatroom"),
                     sender: sub.argument.clone().expect("invariant: recv part, no sender"),
                     message: "".to_string(),
+                    connection: conn,
                     mq: mq,
                 }),
                 _ => Err(())
@@ -63,21 +73,47 @@ impl<'a> TryFrom<(&'a Message, MessageQueue)> for Event {
 }
 
 impl Event {
-    pub fn respond<S>(&self, msg: S)
+    fn mk<S>(&self, msg: S) -> Message
         where S: Into<String> {
-        self.mq.clone().push(Message {
+        Message {
             name: b"send".to_vec(),
             argument: Some(self.chatroom.clone()),
             attrs: HashMap::new(),
             body: Some(MessageBody::from(format!("msg main\n\n{}\0", msg.into())))
-        })
+        }
     }
 
-    pub fn respond_highlight<S>(&self, msg: S)
+    pub fn cancel(&self, i: Instant) -> Option<Message> {
+        self.mq.clone().unschedule(i)
+    }
+
+    pub fn respond<S>(&self, msg: S) -> Instant
+        where S: Into<String> {
+        self.mq.clone().push(self.mk(msg))
+    }
+
+    pub fn respond_in<S>(&self, msg: S, d: Duration) -> Instant
+        where S: Into<String> {
+        self.mq.clone().schedule(self.mk(msg), d)
+    }
+
+    pub fn respond_at<S>(&self, msg: S, i: Instant) -> Instant
+        where S: Into<String> {
+        self.mq.clone().schedule_at(self.mk(msg), i)
+    }
+
+    pub fn respond_highlight<S>(&self, msg: S) -> Instant
         where S: Into<String> {
         self.respond(format!("{}: {}",
             // dA enforces that names are ascii so this is OK
             ::std::str::from_utf8(self.sender.as_slice()).unwrap(),
             msg.into()))
+    }
+
+    pub fn load<T,U>(&self, x: T) -> Vec<U>
+        where T: LoadDsl<SqliteConnection>,
+              U: ::diesel::Queryable<T::SqlType,::diesel::sqlite::Sqlite>,
+              ::diesel::sqlite::Sqlite: ::diesel::types::HasSqlType<T::SqlType> {
+        x.load(&self.connection).expect("Unable to load SQL")
     }
 }

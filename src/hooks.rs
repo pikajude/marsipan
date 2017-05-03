@@ -103,6 +103,12 @@ impl Hook {
         Hook::AddCommand(m, s, f(m))
     }
 
+    pub fn join<F>(f: F) -> Self
+        where F: FnOnce(J) -> Command {
+        let j = J::next();
+        Hook::AddJoin(j, f(j))
+    }
+
     pub fn register_msg<F>(f: F) -> Self
         where F: FnOnce(M) -> Command {
         let m = M::next();

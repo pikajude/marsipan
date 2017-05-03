@@ -4,6 +4,9 @@
 extern crate ansi_term;
 extern crate bytes;
 extern crate damnpacket;
+#[macro_use] extern crate diesel;
+#[macro_use] extern crate diesel_codegen;
+extern crate dotenv;
 extern crate futures;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
@@ -21,6 +24,9 @@ use futures::{Stream, Sink};
 use std::io::BufRead;
 use std::io;
 use std::net::{SocketAddr,ToSocketAddrs};
+use diesel::sqlite::SqliteConnection;
+use dotenv::dotenv;
+use diesel::Connection;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{Core,Handle};
 use tokio_io::AsyncRead;
@@ -83,12 +89,20 @@ fn dump(it: &damnpacket::Message, direction: bool) {
     }
 }
 
+fn connect() -> SqliteConnection {
+    dotenv().ok();
+
+    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    SqliteConnection::establish(&db_url).expect(&format!("Error connecting to {}", db_url))
+}
+
 fn repeatedly(h: &Handle, addr: &SocketAddr) {
     let greeting = Message::from("dAmnClient 0.3\nagent=marsipan\n\0");
     let a2 = addr.clone();
     let h2 = h.clone();
     let mq = MessageQueue::new(&h);
     let mq2 = mq.clone();
+    let conn = ::std::rc::Rc::new(connect());
     h.spawn(TcpStream::connect(&addr, &h).then(|res|
         match res {
             Ok(stream) => Ok(stream.framed(DamnCodec).split()),
@@ -101,7 +115,7 @@ fn repeatedly(h: &Handle, addr: &SocketAddr) {
             rx.and_then(move |item| {
                 dump(&item, true);
                 match ACTIONS.get(&item.name[..]) {
-                    Some(f) => f(item, mq.clone(), &mut hooks.borrow_mut()),
+                    Some(f) => f(item, mq.clone(), &mut hooks.borrow_mut(), &conn),
                     _ => debug!("unknown message")
                 };
                 Ok(None)

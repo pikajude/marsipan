@@ -5,8 +5,10 @@ use messagequeue::MessageQueue;
 use std::collections::HashMap;
 use event::{Event,EType};
 use std::convert::TryFrom;
+use std::rc::Rc;
+use diesel::sqlite::SqliteConnection;
 
-type Callback = fn(Message, MessageQueue, &mut HookStorage);
+type Callback = fn(Message, MessageQueue, &mut HookStorage, &Rc<SqliteConnection>);
 
 lazy_static! {
     pub static ref ACTIONS: HashMap<&'static [u8], Callback> = {
@@ -19,15 +21,15 @@ lazy_static! {
     };
 }
 
-fn respond_ping(_: Message, mq: MessageQueue, _: &mut HookStorage) {
+fn respond_ping(_: Message, mq: MessageQueue, _: &mut HookStorage, s: &Rc<SqliteConnection>) {
     mq.push(Message::from("pong\n\0"));
 }
 
-fn respond_damnserver(_: Message, mq: MessageQueue, _: &mut HookStorage) {
+fn respond_damnserver(_: Message, mq: MessageQueue, _: &mut HookStorage, s: &Rc<SqliteConnection>) {
     mq.push(Message::from(concat!("login participle\npk=", env!("PK"), "\n\0")));
 }
 
-fn respond_login(msg: Message, mq: MessageQueue, _: &mut HookStorage) {
+fn respond_login(msg: Message, mq: MessageQueue, _: &mut HookStorage, s: &Rc<SqliteConnection>) {
     match msg.get_attr(&b"e"[..]) {
         Some("ok") => {
             info!("Logged in successfully");
@@ -38,8 +40,8 @@ fn respond_login(msg: Message, mq: MessageQueue, _: &mut HookStorage) {
     };
 }
 
-fn respond_recv(msg: Message, mq: MessageQueue, h: &mut HookStorage) {
-    if let Ok(ev) = Event::try_from((&msg, mq)) {
+fn respond_recv(msg: Message, mq: MessageQueue, h: &mut HookStorage, s: &Rc<SqliteConnection>) {
+    if let Ok(ev) = Event::try_from((&msg, s.clone(), mq)) {
         let updates = match ev.ty {
             EType::Join => h.join_iter().flat_map(|cmd| {
                 cmd(ev.clone())

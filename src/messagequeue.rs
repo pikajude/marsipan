@@ -29,12 +29,16 @@ impl<K,V> FakeHeap<K,V> where K: Ord {
         self._map.insert(k,v)
     }
 
-    fn peek(&self) -> Option<&K> {
-        self._map.keys().next()
+    fn peek(&self) -> Option<(&K, &V)> {
+        self._map.iter().next()
+    }
+
+    fn remove(&mut self, k: K) -> Option<V> {
+        self._map.remove(&k)
     }
 
     fn pop(&mut self) -> Option<(K, V)> where K: Clone + Copy {
-        if let Some(k) = self.peek().cloned() {
+        if let Some(k) = self.peek().map(|x|x.0).cloned() {
             return Some((k, self._map.remove(&k).unwrap()))
         }
         None
@@ -55,21 +59,28 @@ impl MQ {
         }
     }
 
-    fn push(&mut self, msg: Message) {
-        self.schedule_at(msg, Instant::now());
+    fn push(&mut self, msg: Message) -> Instant {
+        self.schedule_at(msg, Instant::now())
     }
 
-    fn schedule(&mut self, msg: Message, d: Duration) {
-        self.schedule_at(msg, Instant::now() + d);
+    fn schedule(&mut self, msg: Message, d: Duration) -> Instant {
+        self.schedule_at(msg, Instant::now() + d)
     }
 
-    fn schedule_at(&mut self, msg: Message, ins: Instant) {
+    fn schedule_at(&mut self, msg: Message, ins: Instant) -> Instant {
         self.heap.insert(ins, msg);
         self.reschedule();
+        ins
+    }
+
+    fn unschedule(&mut self, ins: Instant) -> Option<Message> {
+        let res = self.heap.remove(ins);
+        self.reschedule();
+        res
     }
 
     fn reschedule(&mut self) {
-        if let Some(stamp) = self.heap.peek().cloned() {
+        if let Some(stamp) = self.heap.peek().map(|x|x.0).cloned() {
             let i = Instant::now();
             self.timeout = Some(Timeout::new(if stamp < i {
                 Duration::new(0,0)
@@ -104,16 +115,20 @@ impl MQ {
 }
 
 impl MessageQueue {
-    pub fn push(&self, msg: Message) {
+    pub fn push(&self, msg: Message) -> Instant {
         self.0.borrow_mut().push(msg)
     }
 
-    pub fn schedule(&self, msg: Message, d: Duration) {
+    pub fn schedule(&self, msg: Message, d: Duration) -> Instant {
         self.0.borrow_mut().schedule(msg, d)
     }
 
-    pub fn schedule_at(&self, msg: Message, ins: Instant) {
+    pub fn schedule_at(&self, msg: Message, ins: Instant) -> Instant {
         self.0.borrow_mut().schedule_at(msg, ins)
+    }
+
+    pub fn unschedule(&self, ins: Instant) -> Option<Message> {
+        self.0.borrow_mut().unschedule(ins)
     }
 
     pub fn new(h: &Handle) -> Self {
