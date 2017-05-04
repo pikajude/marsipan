@@ -34,10 +34,11 @@ pub fn default_cmds() -> Hooks {
                  "echo" => cmd!(echo::echo),
                  "ping" => cmd!(ping::ping),
                  "sleep" => cmd!(sleep::sleep),
-                 "wakeup" => cmd!(sleep::wakeup) ],
+                 "wakeup" => cmd!(sleep::wakeup),
+                 "welcome" => cmd!(welcome::welcome) ],
 
         msg => [],
 
-        join => [ cmd!(welcome::welcome) ]
+        join => [ cmd!(welcome::say_welcome) ]
     }
 }

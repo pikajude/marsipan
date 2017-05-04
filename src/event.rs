@@ -1,9 +1,11 @@
 use damnpacket::{Message,MessageBody,MessageIsh};
+use diesel::ExecuteDsl;
 use diesel::sqlite::SqliteConnection;
 use messagequeue::MessageQueue;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::time::{Duration,Instant};
+use std::str::SplitWhitespace;
 use std::rc::Rc;
 use diesel::LoadDsl;
 
@@ -72,6 +74,20 @@ impl<'a> TryFrom<(&'a Message, Rc<SqliteConnection>, MessageQueue)> for Event {
     }
 }
 
+pub struct Body(String);
+
+impl Body {
+    fn arg(&self, n: usize) -> Option<String> {
+        self.0.split_whitespace().nth(n).map(|x|x.to_string())
+    }
+}
+
+pub fn word<'a>(s: &'a String) -> (&'a str, &'a str) {
+    match s.split_at(s.find(' ').unwrap_or(s.len())) {
+        (x, y) => (x, if y.len() > 0 { &y[1..] } else { y })
+    }
+}
+
 impl Event {
     fn mk<S>(&self, msg: S) -> Message
         where S: Into<String> {
@@ -81,6 +97,10 @@ impl Event {
             attrs: HashMap::new(),
             body: Some(MessageBody::from(format!("msg main\n\n{}\0", msg.into())))
         }
+    }
+
+    pub fn content(&self) -> String {
+        word(&self.message).1.to_string()
     }
 
     pub fn cancel(&self, i: Instant) -> Option<Message> {
@@ -115,5 +135,10 @@ impl Event {
               U: ::diesel::Queryable<T::SqlType,::diesel::sqlite::Sqlite>,
               ::diesel::sqlite::Sqlite: ::diesel::types::HasSqlType<T::SqlType> {
         x.load(&self.connection).expect("Unable to load SQL")
+    }
+
+    pub fn execute<T>(&self, x: T) -> usize
+        where T: ExecuteDsl<SqliteConnection> {
+        x.execute(&self.connection).expect("Unable to insert SQL")
     }
 }
