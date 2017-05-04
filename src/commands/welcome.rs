@@ -36,9 +36,8 @@ pub fn say_welcome(e: Event) -> Hooks {
     use self::models::*;
     use self::schema::welcomes::dsl::*;
 
-    let result: Option<Welcome> = e.load(welcomes.filter(user.eq(string!(e.sender)))).into_iter().next();
-
-    if let Some(w) = result {
+    if let Some(w) = e.load(welcomes.filter(user.eq(string!(e.sender))))
+                      .into_iter().next() as Option<Welcome> {
         e.respond(w.body);
     }
 
@@ -49,9 +48,15 @@ pub fn welcome(e: Event) -> Hooks {
     use self::models::*;
     use self::schema::welcomes::dsl::*;
 
+    e.respond(format!("{:?}", e.sender));
+
     match word(&e.content()) {
-        ("get", _) => e.respond_highlight("I don't know"),
-        (x, _) => e.respond_highlight("Usage: !welcome { get | set <i>welcome</i> | clear }"),
+        ("get", _) =>
+            match e.load(welcomes.filter(user.eq(string!(e.sender)))).into_iter().next() as Option<Welcome> {
+                Some(w) => e.respond_highlight(format!("Your welcome is '{}'", w.body)),
+                None => e.respond_highlight("You don't have a welcome."),
+            },
+        (_, _) => e.respond_highlight("Usage: !welcome { get | set <i>welcome</i> | clear }"),
     };
 
     vec![]

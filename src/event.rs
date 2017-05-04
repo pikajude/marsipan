@@ -74,15 +74,7 @@ impl<'a> TryFrom<(&'a Message, Rc<SqliteConnection>, MessageQueue)> for Event {
     }
 }
 
-pub struct Body(String);
-
-impl Body {
-    fn arg(&self, n: usize) -> Option<String> {
-        self.0.split_whitespace().nth(n).map(|x|x.to_string())
-    }
-}
-
-pub fn word<'a>(s: &'a String) -> (&'a str, &'a str) {
+pub fn word<'a>(s: &'a str) -> (&'a str, &'a str) {
     match s.split_at(s.find(' ').unwrap_or(s.len())) {
         (x, y) => (x, if y.len() > 0 { &y[1..] } else { y })
     }
