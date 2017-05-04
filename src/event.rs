@@ -24,7 +24,6 @@ pub struct Event {
     connection: Rc<SqliteConnection>,
 
     mq: MessageQueue,
-    // updates: Vec<Update>,
 }
 
 impl<'a> TryFrom<(&'a Message, Rc<SqliteConnection>, MessageQueue)> for Event {
@@ -91,8 +90,8 @@ impl Event {
         }
     }
 
-    pub fn content(&self) -> String {
-        word(&self.message).1.to_string()
+    pub fn content<'a>(&'a self) -> &'a str {
+        word(&self.message).1
     }
 
     pub fn cancel(&self, i: Instant) -> Option<Message> {
@@ -123,14 +122,16 @@ impl Event {
     }
 
     pub fn load<T,U>(&self, x: T) -> Vec<U>
-        where T: LoadDsl<SqliteConnection>,
+        where T: LoadDsl<SqliteConnection> + ::std::fmt::Debug,
               U: ::diesel::Queryable<T::SqlType,::diesel::sqlite::Sqlite>,
               ::diesel::sqlite::Sqlite: ::diesel::types::HasSqlType<T::SqlType> {
+        info!("diesel: {:?}", x);
         x.load(&self.connection).expect("Unable to load SQL")
     }
 
     pub fn execute<T>(&self, x: T) -> usize
-        where T: ExecuteDsl<SqliteConnection> {
+        where T: ExecuteDsl<SqliteConnection> + ::std::fmt::Debug {
+        info!("diesel: {:?}", x);
         x.execute(&self.connection).expect("Unable to insert SQL")
     }
 }
