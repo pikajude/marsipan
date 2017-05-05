@@ -4,22 +4,23 @@ version = "0.1.0"
 authors = ["Jude Taylor <me@jude.bio>"]
 
 [dependencies]
-damnpacket = { path = "damnpacket" }
-rustc_version_runtime = "*"
-tokio-proto = "0.1"
-env_logger = "*"
-log = "*"
-tokio-io = "0.1"
-tokio-core = "0.1"
-tokio-timer = "0.1"
-bytes = "0.4"
-futures = "*"
 ansi_term = "*"
-lazy_static = "0.2"
+bytes = "0.4"
+damnpacket = { path = "damnpacket" }
 diesel = { version = "*", features = ["sqlite"] }
 diesel_codegen = { version = "*", features = ["sqlite"] }
 dotenv = "*"
+env_logger = "*"
+futures = "*"
+lazy_static = "0.2"
 libsqlite3-sys = { version = "=0.7.1", optional = true }
+log = "*"
+rustc_version_runtime = "*"
+string = { path = "string" }
+tokio-core = "0.1"
+tokio-io = "0.1"
+tokio-proto = "0.1"
+tokio-timer = "0.1"
 
 [dependencies.nom]
 version = "*"

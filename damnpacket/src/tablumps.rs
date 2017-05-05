@@ -190,10 +190,6 @@ fn link(input: &[u8]) -> ::IResult<&[u8], Tablump> {
     }
 }
 
-macro_rules! string {
-    ($x:expr) => { $x.iter().map(|&c|c as char).collect::<String>() }
-}
-
 impl Tablump {
     fn as_string(&self) -> String {
         use self::Tablump::*;

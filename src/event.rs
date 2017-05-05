@@ -5,7 +5,6 @@ use messagequeue::MessageQueue;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::time::{Duration,Instant};
-use std::str::SplitWhitespace;
 use std::rc::Rc;
 use diesel::LoadDsl;
 

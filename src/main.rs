@@ -12,6 +12,7 @@ extern crate futures;
 #[macro_use] extern crate log;
 extern crate env_logger;
 extern crate nom;
+#[macro_use] extern crate string;
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate tokio_proto;

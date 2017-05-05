@@ -7,6 +7,7 @@ authors = ["Jude Taylor <me@jude.bio>"]
 ansi_term = "0.9"
 htmlescape = "*"
 log = "*"
+string = { path = "../string" }
 
 [dependencies.nom]
 version = "*"

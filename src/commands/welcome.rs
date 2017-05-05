@@ -1,10 +1,6 @@
 use commands::prelude::*;
 use diesel;
 use diesel::associations::HasTable;
-use diesel::prelude::*;
-use diesel::sqlite::SqliteConnection;
-use dotenv::dotenv;
-use std::env;
 
 mod models {
     use super::schema::welcomes;
@@ -22,31 +18,31 @@ mod models {
         pub user: String,
         pub body: String,
     }
+
+    impl Welcome {
+        pub fn belongs_to(u: &[u8]) -> ::diesel::helper_types::FindBy<
+                super::schema::welcomes::dsl::welcomes,
+                super::schema::welcomes::dsl::user,
+                String> {
+            use super::schema::welcomes::dsl::*;
+
+            use diesel::FilterDsl;
+            use diesel::ExpressionMethods;
+
+            welcomes.filter(user.eq(string!(u)))
+        }
+    }
 }
 
 mod schema {
     infer_schema!("dotenv:DATABASE_URL");
 }
 
-macro_rules! string {
-    ($x:expr) => { $x.iter().map(|&c|c as char).collect::<String>() }
-}
-
-macro_rules! welcome_for {
-    ($x:expr) => {
-        {
-            use self::models::*;
-            use self::schema::welcomes::dsl::*;
-
-            welcomes.filter(user.eq(string!($x)))
-        }
-    }
-}
-
 pub fn say_welcome(e: Event) -> Hooks {
     use self::models::Welcome;
 
-    if let Some(w) = e.load(welcome_for!(e.sender)).into_iter().next() as Option<Welcome> {
+    if let Some(w) = e.load(Welcome::belongs_to(&e.sender))
+                      .into_iter().next() as Option<Welcome> {
         e.respond(w.body);
     }
 
@@ -59,7 +55,7 @@ pub fn welcome(e: Event) -> Hooks {
 
     match word(&e.content()) {
         ("get", _) => {
-            match e.load(welcome_for!(e.sender)).into_iter().next() as Option<Welcome> {
+            match e.load(Welcome::belongs_to(&e.sender)).into_iter().next() as Option<Welcome> {
                 Some(w) => e.respond_highlight(format!("Your welcome is '{}'", w.body)),
                 None => e.respond_highlight("You don't have a welcome."),
             };
@@ -76,9 +72,13 @@ pub fn welcome(e: Event) -> Hooks {
             e.respond_highlight("Your welcome has been set.");
         },
         ("clear", _) => {
-            e.execute(diesel::delete(welcomes.filter(user.eq(string!(e.sender)))));
-            e.respond_highlight("Your welcome has been forgotten.");
-        }
+            let affected = e.execute(diesel::delete(Welcome::belongs_to(&e.sender)));
+            if affected > 0 {
+                e.respond_highlight("Your welcome has been forgotten.");
+            } else {
+                e.respond_highlight("You didn't have a welcome.");
+            }
+        },
         (_, _) => {
             e.respond_highlight("Usage: !welcome { get | set <i>welcome</i> | clear }");
         },

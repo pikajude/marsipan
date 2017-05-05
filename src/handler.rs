@@ -21,15 +21,15 @@ lazy_static! {
     };
 }
 
-fn respond_ping(_: Message, mq: MessageQueue, _: &mut HookStorage, s: &Rc<SqliteConnection>) {
+fn respond_ping(_: Message, mq: MessageQueue, _: &mut HookStorage, _: &Rc<SqliteConnection>) {
     mq.push(Message::from("pong\n\0"));
 }
 
-fn respond_damnserver(_: Message, mq: MessageQueue, _: &mut HookStorage, s: &Rc<SqliteConnection>) {
+fn respond_damnserver(_: Message, mq: MessageQueue, _: &mut HookStorage, _: &Rc<SqliteConnection>) {
     mq.push(Message::from(concat!("login participle\npk=", env!("PK"), "\n\0")));
 }
 
-fn respond_login(msg: Message, mq: MessageQueue, _: &mut HookStorage, s: &Rc<SqliteConnection>) {
+fn respond_login(msg: Message, mq: MessageQueue, _: &mut HookStorage, _: &Rc<SqliteConnection>) {
     match msg.get_attr(&b"e"[..]) {
         Some("ok") => {
             info!("Logged in successfully");

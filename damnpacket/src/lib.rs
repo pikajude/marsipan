@@ -2,6 +2,7 @@ extern crate ansi_term;
 #[macro_use] extern crate log;
 #[macro_use] extern crate nom;
 extern crate htmlescape;
+#[macro_use] extern crate string;
 
 use ansi_term::{ANSIByteStrings,Colour,Style};
 use nom::*;
