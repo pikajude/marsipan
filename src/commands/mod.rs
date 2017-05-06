@@ -7,6 +7,7 @@ mod ping;
 mod prelude;
 mod sleep;
 mod welcome;
+mod wordwar;
 
 macro_rules! cmd {
     ($e:expr) => { |_| box $e as Command };
@@ -35,7 +36,8 @@ pub fn default_cmds() -> Hooks {
                  "ping" => cmd!(ping::ping),
                  "sleep" => cmd!(sleep::sleep),
                  "wakeup" => cmd!(sleep::wakeup),
-                 "welcome" => cmd!(welcome::welcome) ],
+                 "welcome" => cmd!(welcome::welcome),
+                 "ww" => cmd!(wordwar::wordwar) ],
 
         msg => [],
 

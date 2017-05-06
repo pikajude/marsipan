@@ -65,26 +65,17 @@ impl HookStorage {
 
 static UNIQUE: AtomicUsize = ATOMIC_USIZE_INIT;
 
-fn new_unique() -> usize {
-    UNIQUE.fetch_add(1, Ordering::SeqCst)
-}
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub struct M(usize);
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub struct J(usize);
-
-impl M {
-    pub fn next() -> Self {
-        M(new_unique())
+macro_rules! unique {
+    ($i:ident) => {
+        #[derive(PartialEq,Eq,Hash,Clone,Copy)]
+        pub struct $i(usize);
+        impl $i { pub fn next() -> Self { $i(UNIQUE.fetch_add(1, Ordering::SeqCst)) } }
     }
 }
 
-impl J {
-    pub fn next() -> Self {
-        J(new_unique())
-    }
-}
+unique!(M); // for msg-hooks
+unique!(J); // for join-hooks
+unique!(W); // for word wars
 
 pub enum Hook {
     AddMessage(M, Command),

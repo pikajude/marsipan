@@ -1,8 +1,10 @@
 #![feature(try_from)]
 #![feature(box_syntax)]
+#![feature(const_fn)]
 
 extern crate ansi_term;
 extern crate bytes;
+extern crate chrono;
 extern crate damnpacket;
 #[macro_use] extern crate diesel;
 #[macro_use] extern crate diesel_codegen;
@@ -11,7 +13,8 @@ extern crate futures;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 extern crate env_logger;
-extern crate nom;
+#[macro_use] extern crate nom;
+extern crate state;
 #[macro_use] extern crate string;
 extern crate tokio_core;
 extern crate tokio_io;

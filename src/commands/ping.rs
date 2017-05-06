@@ -7,7 +7,7 @@ pub fn ping(e: Event) -> Hooks {
     vec![Hook::register_msg(|m| box move |e| {
         if e.message == "\u{1f514}?" {
             let diff = Instant::now() - t;
-            let ms = (diff.subsec_nanos().checked_div(1000000).unwrap() as u64)
+            let ms = (diff.subsec_nanos() as u64 / 1000000)
                 + diff.as_secs() * 1000;
             e.respond(format!("\u{1f514}! ({}ms)", ms));
             return vec![Hook::unregister(m)];

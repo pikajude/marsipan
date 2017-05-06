@@ -6,6 +6,7 @@ authors = ["Jude Taylor <me@jude.bio>"]
 [dependencies]
 ansi_term = "*"
 bytes = "0.4"
+chrono = "*"
 damnpacket = { path = "damnpacket" }
 diesel = { version = "*", features = ["sqlite"] }
 diesel_codegen = { version = "*", features = ["sqlite"] }
@@ -16,6 +17,7 @@ lazy_static = "0.2"
 libsqlite3-sys = { version = "=0.7.1", optional = true }
 log = "*"
 rustc_version_runtime = "*"
+state = "*"
 string = { path = "string" }
 tokio-core = "0.1"
 tokio-io = "0.1"
