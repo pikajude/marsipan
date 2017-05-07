@@ -7,7 +7,7 @@ use nom::digit;
 use state::Storage;
 use std::collections::{HashMap,HashSet};
 use std::time::Duration as StdDuration;
-use std::sync::Mutex;
+use std::sync::{Mutex,MutexGuard};
 
 fn until(other: DateTime<Local>) -> Option<StdDuration> {
     let d = other.signed_duration_since(Local::now());
@@ -18,13 +18,19 @@ fn until(other: DateTime<Local>) -> Option<StdDuration> {
     Some(StdDuration::new(d.num_seconds() as u64, nanos_only.num_nanoseconds().unwrap() as u32))
 }
 
+#[derive(Debug)]
 struct War {
     start_msg: Instant,
     end_msg: Instant,
+    participants: HashSet<String>,
     starter: String,
 }
 
 static WARS: Storage<Mutex<HashMap<W, War>>> = Storage::new();
+
+fn wars<'a>() -> MutexGuard<'a, HashMap<W, War>> {
+    WARS.get().lock().unwrap()
+}
 
 named!(dec<u32>, map_res!(map_res!(digit, ::std::str::from_utf8), ::std::str::FromStr::from_str));
 
@@ -66,9 +72,14 @@ pub fn wordwar(e: Event) -> Hooks {
             let start_cloned = start.clone();
             let w2 = w.clone();
 
-            WARS.get().lock().unwrap().insert(w, War {
+            wars().insert(w, War {
                 start_msg: start,
                 end_msg: end,
+                participants: {
+                    let mut h = HashSet::new();
+                    h.insert(string!(e.sender));
+                    h
+                },
                 starter: string!(e.sender),
             });
 
@@ -77,7 +88,15 @@ pub fn wordwar(e: Event) -> Hooks {
                     return vec![Hook::unregister(m)];
                 }
 
-                e.respond_highlight(format!("You've been added to war #{}.", w2));
+                let mut wars = wars();
+                let mut current_war = wars.get_mut(&w).unwrap();
+
+                if current_war.participants.contains(&string!(e.sender)) {
+                    e.respond_highlight("You're already in this war.");
+                } else {
+                    current_war.participants.insert(string!(e.sender));
+                    e.respond_highlight(format!("You've been added to war #{}.", w2));
+                }
 
                 vec![]
             })]
@@ -86,4 +105,8 @@ pub fn wordwar(e: Event) -> Hooks {
     }
 
     vec![]
+}
+
+pub fn wars_init() {
+    WARS.set(Mutex::new(HashMap::new()));
 }

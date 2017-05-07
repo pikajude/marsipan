@@ -29,6 +29,8 @@ macro_rules! cmds {
 }
 
 pub fn default_cmds() -> Hooks {
+    wordwar::wars_init();
+
     cmds! {
         cmd => [ "about" => cmd!(about::about),
                  "commands" => |_| commands::commands(CMD_NAMES),

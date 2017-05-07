@@ -67,7 +67,7 @@ static UNIQUE: AtomicUsize = ATOMIC_USIZE_INIT;
 
 macro_rules! unique {
     ($i:ident) => {
-        #[derive(PartialEq,Eq,Hash,Clone,Copy)]
+        #[derive(PartialEq,Eq,Hash,Clone,Copy,Debug)]
         pub struct $i(usize);
         impl $i { pub fn next() -> Self { $i(UNIQUE.fetch_add(1, Ordering::SeqCst)) } }
         impl ::std::fmt::Display for $i {
