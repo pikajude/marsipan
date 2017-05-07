@@ -66,6 +66,12 @@ pub fn wordwar(e: Event) -> Hooks {
             let start_cloned = start.clone();
             let w2 = w.clone();
 
+            WARS.get().lock().unwrap().insert(w, War {
+                start_msg: start,
+                end_msg: end,
+                starter: string!(e.sender),
+            });
+
             return vec![Hook::register("in", |m| box move |e| {
                 if Instant::now() > start_cloned {
                     return vec![Hook::unregister(m)];
