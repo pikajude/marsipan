@@ -70,6 +70,11 @@ macro_rules! unique {
         #[derive(PartialEq,Eq,Hash,Clone,Copy)]
         pub struct $i(usize);
         impl $i { pub fn next() -> Self { $i(UNIQUE.fetch_add(1, Ordering::SeqCst)) } }
+        impl ::std::fmt::Display for $i {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
+                write!(f, "{}", self.0)
+            }
+        }
     }
 }
 

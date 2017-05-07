@@ -19,9 +19,8 @@ fn until(other: DateTime<Local>) -> Option<StdDuration> {
 }
 
 struct War {
-    start: Instant,
-    end: Instant,
-    participants: HashSet<String>,
+    start_msg: Instant,
+    end_msg: Instant,
     starter: String,
 }
 
@@ -38,10 +37,6 @@ named!(parse_ww<(u32,u32)>, do_parse!(
 ));
 
 impl War {
-    fn active(&self) -> bool {
-        self.end <= Instant::now()
-    }
-
     fn parse(bytes: &[u8]) -> Result<(DateTime<Local>, DateTime<Local>), String> {
         let (at, dur) = parse_ww(bytes).to_result().map_err(|_|"I don't understand.".to_string())?;
         if dur > 59 {
@@ -52,15 +47,37 @@ impl War {
             current_time + Duration::hours(1)
         } else {
             current_time
-        }.with_minute(at).and_then(|m|m.with_second(0))
-         .and_then(|m|m.with_nanosecond(0)).ok_or("math error")?;
+        }.with_minute(at).and_then(|m|m.with_second(0)).ok_or("math error")?;
         Ok((start_time, start_time + Duration::minutes(dur as i64)))
     }
 }
 
 pub fn wordwar(e: Event) -> Hooks {
     let res = War::parse(e.content().as_bytes());
-    e.respond(format!("{:?}", res));
+    match res {
+        Ok((start_instant, end_instant)) => {
+            let w = W::next();
+
+            let start = e.respond_in(format!("{}: <b>START WRITING!</b>", string!(e.sender)), until(start_instant).unwrap());
+            let end = e.respond_in(format!("{}: <b>STOP WRITING!</b>", string!(e.sender)), until(end_instant).unwrap());
+
+            e.respond_highlight(format!("Scheduled war with ID #{}.", w));
+
+            let start_cloned = start.clone();
+            let w2 = w.clone();
+
+            return vec![Hook::register("in", |m| box move |e| {
+                if Instant::now() > start_cloned {
+                    return vec![Hook::unregister(m)];
+                }
+
+                e.respond_highlight(format!("You've been added to war #{}.", w2));
+
+                vec![]
+            })]
+        },
+        Err(s) => { e.respond_highlight(s); }
+    }
 
     vec![]
 }
