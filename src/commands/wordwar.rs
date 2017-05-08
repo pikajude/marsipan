@@ -64,9 +64,30 @@ impl War {
 pub fn wordwar(e: &Event) -> Hooks {
     match word(e.content()) {
         ("at", rest) => wordwar_at(e, rest),
+        ("cancel", id) => wordwar_cancel(e, id),
         ("list", _) => wordwar_list(e),
         x => { e.respond_highlight(format!("{:?}", x)); vec![] }
     }
+}
+
+fn wordwar_cancel(e: &Event, id: &str) -> Hooks {
+    match id.parse() {
+        Ok(h) => {
+            match wars().get(&h) {
+                Some(w) => if w.starter == string!(e.sender) {
+                    let war = wars().remove(&h).unwrap();
+                    e.cancel(war.start_msg);
+                    e.cancel(war.end_msg);
+                    e.respond_highlight(format!("Canceled war #{}.", h))
+                } else {
+                    e.respond_highlight("That's not yours.")
+                },
+                None => e.respond_highlight("No war with that ID found.")
+            }
+        },
+        Err(_) => e.respond_highlight("That doesn't look like a war ID."),
+    };
+    vec![]
 }
 
 fn wordwar_list(e: &Event) -> Hooks {

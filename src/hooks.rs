@@ -78,9 +78,18 @@ macro_rules! unique {
                 self.0
             }
         }
+
         impl ::std::fmt::Display for $i {
             fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
                 write!(f, "{}", self.0)
+            }
+        }
+
+        impl ::std::str::FromStr for $i {
+            type Err = ::std::num::ParseIntError;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                s.parse().map($i)
             }
         }
     }
