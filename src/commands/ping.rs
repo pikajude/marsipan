@@ -1,7 +1,7 @@
 use commands::prelude::*;
 use std::time::Instant;
 
-pub fn ping(e: Event) -> Hooks {
+pub fn ping(e: &Event) -> Hooks {
     e.respond("\u{1f514}?");
     let t = Instant::now();
     vec![Hook::register_msg(|m| box move |e| {

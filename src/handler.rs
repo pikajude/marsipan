@@ -44,13 +44,13 @@ fn respond_recv(msg: Message, mq: MessageQueue, h: &mut HookStorage, s: &Rc<Sqli
     if let Ok(ev) = Event::try_from((&msg, s.clone(), mq)) {
         let updates = match ev.ty {
             EType::Join => h.join_iter().flat_map(|cmd| {
-                cmd(ev.clone())
+                cmd(&ev)
             }).collect::<Hooks>(),
             EType::Part => {
                 vec![]
             },
             _ => h.msg_iter().flat_map(|cmd| {
-                cmd(ev.clone())
+                cmd(&ev)
             }).collect::<Hooks>()
         };
         h.apply(updates);

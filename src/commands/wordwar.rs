@@ -20,6 +20,8 @@ fn until(other: DateTime<Local>) -> Option<StdDuration> {
 
 #[derive(Debug)]
 struct War {
+    start_time: DateTime<Local>,
+    end_time: DateTime<Local>,
     start_msg: Instant,
     end_msg: Instant,
     participants: HashSet<String>,
@@ -35,7 +37,7 @@ fn wars<'a>() -> MutexGuard<'a, HashMap<W, War>> {
 named!(dec<u32>, map_res!(map_res!(digit, ::std::str::from_utf8), ::std::str::FromStr::from_str));
 
 named!(parse_ww<(u32,u32)>, do_parse!(
-    tag!("at :") >>
+    tag!(":") >>
     min: dec >>
     tag!(" for ") >>
     dur: dec >>
@@ -44,7 +46,8 @@ named!(parse_ww<(u32,u32)>, do_parse!(
 
 impl War {
     fn parse(bytes: &[u8]) -> Result<(DateTime<Local>, DateTime<Local>), String> {
-        let (at, dur) = parse_ww(bytes).to_result().map_err(|_|"I don't understand.".to_string())?;
+        let (at, dur) = parse_ww(bytes).to_full_result()
+            .map_err(|_|format!("Usage: !ww at :<b>time</b> for <b>minutes</b>"))?;
         if dur > 59 {
             return Err("Too many minutes.".to_string())
         }
@@ -58,8 +61,32 @@ impl War {
     }
 }
 
-pub fn wordwar(e: Event) -> Hooks {
-    let res = War::parse(e.content().as_bytes());
+pub fn wordwar(e: &Event) -> Hooks {
+    match word(e.content()) {
+        ("at", rest) => wordwar_at(e, rest),
+        ("list", _) => wordwar_list(e),
+        x => { e.respond_highlight(format!("{:?}", x)); vec![] }
+    }
+}
+
+fn wordwar_list(e: &Event) -> Hooks {
+    let mut response = "<ul>".to_string();
+    for (k, v) in wars().iter() {
+        response.push_str(&format!(
+            "<li>#{id} (<b>{starter}</b>)<br><code>:{start} [===.........] :{end}</code></li>",
+            id = k.un(),
+            starter = v.starter,
+            start = v.start_time.format("%M").to_string(),
+            end = v.end_time.format("%M").to_string()));
+    }
+    response.push_str("</ul>");
+    e.respond(response);
+
+    vec![]
+}
+
+fn wordwar_at(e: &Event, rest: &str) -> Hooks {
+    let res = War::parse(rest.as_bytes());
     match res {
         Ok((start_instant, end_instant)) => {
             let w = W::next();
@@ -73,6 +100,8 @@ pub fn wordwar(e: Event) -> Hooks {
             let w2 = w.clone();
 
             wars().insert(w, War {
+                start_time: start_instant,
+                end_time: end_instant,
                 start_msg: start,
                 end_msg: end,
                 participants: {
@@ -89,13 +118,16 @@ pub fn wordwar(e: Event) -> Hooks {
                 }
 
                 let mut wars = wars();
-                let mut current_war = wars.get_mut(&w).unwrap();
-
-                if current_war.participants.contains(&string!(e.sender)) {
-                    e.respond_highlight("You're already in this war.");
-                } else {
-                    current_war.participants.insert(string!(e.sender));
-                    e.respond_highlight(format!("You've been added to war #{}.", w2));
+                match wars.get_mut(&w) {
+                    None => return vec![Hook::unregister(m)],
+                    Some(ref mut current_war) => {
+                        if current_war.participants.contains(&string!(e.sender)) {
+                            e.respond_highlight("You're already in this war.");
+                        } else {
+                            current_war.participants.insert(string!(e.sender));
+                            e.respond_highlight(format!("You've been added to war #{}.", w2));
+                        }
+                    }
                 }
 
                 vec![]

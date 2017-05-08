@@ -2,7 +2,7 @@ use commands::prelude::*;
 
 static mut N: Option<Instant> = None;
 
-pub fn wakeup(e: Event) -> Hooks {
+pub fn wakeup(e: &Event) -> Hooks {
     if let Some(i) = unsafe {
         if let Some(n) = N {
             N = None;
@@ -19,7 +19,7 @@ pub fn wakeup(e: Event) -> Hooks {
     vec![]
 }
 
-pub fn sleep(e: Event) -> Hooks {
+pub fn sleep(e: &Event) -> Hooks {
     if e.message.len() < 7 {
         return vec![];
     }

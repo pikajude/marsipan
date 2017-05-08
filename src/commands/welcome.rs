@@ -38,7 +38,7 @@ mod schema {
     infer_schema!("dotenv:DATABASE_URL");
 }
 
-pub fn say_welcome(e: Event) -> Hooks {
+pub fn say_welcome(e: &Event) -> Hooks {
     use self::models::Welcome;
 
     if let Some(w) = e.load(Welcome::belongs_to(&e.sender))
@@ -49,7 +49,7 @@ pub fn say_welcome(e: Event) -> Hooks {
     vec![]
 }
 
-pub fn welcome(e: Event) -> Hooks {
+pub fn welcome(e: &Event) -> Hooks {
     use self::models::{NewWelcome,Welcome};
     use self::schema::welcomes::dsl::*;
 

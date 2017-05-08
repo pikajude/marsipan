@@ -5,7 +5,7 @@ use event::Event;
 
 static TRIGGERS: [&'static str; 2] = ["!", "participle: "];
 
-pub type Command = Box<Fn(Event) -> Hooks + Send>;
+pub type Command = Box<Fn(&Event) -> Hooks + Send>;
 
 pub struct HookStorage {
     msg: HashMap<M, Command>,
@@ -69,7 +69,15 @@ macro_rules! unique {
     ($i:ident) => {
         #[derive(PartialEq,Eq,Hash,Clone,Copy,Debug)]
         pub struct $i(usize);
-        impl $i { pub fn next() -> Self { $i(UNIQUE.fetch_add(1, Ordering::SeqCst)) } }
+        impl $i {
+            pub fn next() -> Self {
+                $i(UNIQUE.fetch_add(1, Ordering::SeqCst))
+            }
+
+            pub fn un(&self) -> usize {
+                self.0
+            }
+        }
         impl ::std::fmt::Display for $i {
             fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
                 write!(f, "{}", self.0)
