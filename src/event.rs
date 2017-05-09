@@ -114,10 +114,7 @@ impl Event {
 
     pub fn respond_highlight<S>(&self, msg: S) -> Instant
         where S: Into<String> {
-        self.respond(format!("{}: {}",
-            // dA enforces that names are ascii so this is OK
-            ::std::str::from_utf8(self.sender.as_slice()).unwrap(),
-            msg.into()))
+        self.respond(format!("{}: {}", string!(self.sender), msg.into()))
     }
 
     pub fn load<T,U>(&self, x: T) -> Vec<U>
