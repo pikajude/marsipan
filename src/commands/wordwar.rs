@@ -59,6 +59,11 @@ impl War {
         }.with_minute(at).and_then(|m|m.with_second(0)).ok_or("math error")?;
         Ok((start_time, start_time + Duration::minutes(dur as i64)))
     }
+
+    fn cancel(&self, e: &Event) {
+        e.cancel(self.start_msg);
+        e.cancel(self.end_msg);
+    }
 }
 
 pub fn wordwar(e: &Event) -> Hooks {
@@ -76,8 +81,7 @@ fn wordwar_cancel(e: &Event, id: &str) -> Hooks {
             match wars().get(&h) {
                 Some(w) => if w.starter == string!(e.sender) {
                     let war = wars().remove(&h).unwrap();
-                    e.cancel(war.start_msg);
-                    e.cancel(war.end_msg);
+                    war.cancel(&e);
                     e.respond_highlight(format!("Canceled war #{}.", h))
                 } else {
                     e.respond_highlight("That's not yours.")

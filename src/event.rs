@@ -74,7 +74,7 @@ impl<'a> TryFrom<(&'a Message, Rc<SqliteConnection>, MessageQueue)> for Event {
 
 pub fn word<'a>(s: &'a str) -> (&'a str, &'a str) {
     match s.split_at(s.find(' ').unwrap_or(s.len())) {
-        (x, y) => (x, if y.len() > 0 { &y[1..] } else { y })
+        (x, y) => (x, y.trim_left())
     }
 }
 
