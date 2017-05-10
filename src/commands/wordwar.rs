@@ -62,17 +62,12 @@ impl War {
 
     fn register_msgs(&mut self, e: &Event) {
         self.cancel(e);
+        let participants_list = self.participants.clone().into_iter().collect::<Vec<_>>().join(", ");
         let start = until(self.start_time).map(|t| {
-            e.respond_in(format!(
-                    "{}: <b>START WRITING!</b>",
-                    self.participants.clone().into_iter().collect::<Vec<_>>().join(", "))
-                , t)
+            e.respond_in(format!("{}: <b>START WRITING!</b>", participants_list), t)
         });
         let end = until(self.end_time).map(|t| {
-            e.respond_in(format!(
-                    "{}: <b>STOP WRITING!</b>",
-                    self.participants.clone().into_iter().collect::<Vec<_>>().join(", "))
-                , t)
+            e.respond_in(format!("{}: <b>STOP WRITING!</b>", participants_list), t)
         });
         self.start_msg = start;
         self.end_msg = end;
@@ -158,47 +153,45 @@ fn wordwar_at(e: &Event, rest: &str) -> Hooks {
 
             wars().insert(w, new_war);
 
-            return vec![Hook::register("in", |m| box move |e| {
+            return vec![Hook::register("in", |m| box move |e|
                 if Instant::now() > start_cloned {
-                    return vec![Hook::unregister(m)];
-                }
-
-                let mut wars = wars();
-                match wars.get_mut(&w) {
-                    None => return vec![Hook::unregister(m)],
-                    Some(mut current_war) => {
-                        if current_war.participants.contains(&string!(e.sender)) {
-                            e.respond_highlight("You're already in this war.");
-                        } else {
-                            current_war.participants.insert(string!(e.sender));
-                            current_war.register_msgs(&e);
-                            e.respond_highlight(format!("You've been added to war #{}.", w2));
+                    vec![Hook::unregister(m)]
+                } else {
+                    match wars().get_mut(&w) {
+                        None => return vec![Hook::unregister(m)],
+                        Some(mut current_war) => {
+                            if current_war.participants.contains(&string!(e.sender)) {
+                                e.respond_highlight("You're already in this war.");
+                            } else {
+                                current_war.participants.insert(string!(e.sender));
+                                current_war.register_msgs(&e);
+                                e.respond_highlight(format!("You've been added to war #{}.", w2));
+                            }
                         }
                     }
-                }
 
-                vec![]
-            }), Hook::register("out", |m| box move |e| {
+                    vec![]
+                }
+            ), Hook::register("out", |m| box move |e|
                 if Instant::now() > end_cloned {
-                    return vec![Hook::unregister(m)];
-                }
-
-                let mut wars = wars();
-                match wars.get_mut(&w) {
-                    None => return vec![Hook::unregister(m)],
-                    Some(mut current_war) => {
-                        if current_war.participants.contains(&string!(e.sender)) {
-                            current_war.participants.remove(&string!(e.sender));
-                            current_war.register_msgs(&e);
-                            e.respond_highlight(format!("You've been removed from war #{}.", w2));
-                        } else {
-                            e.respond_highlight("You're not in this war.");
+                    vec![Hook::unregister(m)]
+                } else {
+                    match wars().get_mut(&w) {
+                        None => return vec![Hook::unregister(m)],
+                        Some(mut current_war) => {
+                            if current_war.participants.contains(&string!(e.sender)) {
+                                current_war.participants.remove(&string!(e.sender));
+                                current_war.register_msgs(&e);
+                                e.respond_highlight(format!("You've been removed from war #{}.", w2));
+                            } else {
+                                e.respond_highlight("You're not in this war.");
+                            }
                         }
                     }
-                }
 
-                vec![]
-            })]
+                    vec![]
+                }
+            )]
         },
         Err(s) => { e.respond_highlight(s); }
     }
