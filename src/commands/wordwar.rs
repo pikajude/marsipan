@@ -18,16 +18,6 @@ fn until(other: DateTime<Local>) -> Option<StdDuration> {
     Some(StdDuration::new(d.num_seconds() as u64, nanos_only.num_nanoseconds().unwrap() as u32))
 }
 
-#[derive(Debug)]
-struct War {
-    start_time: DateTime<Local>,
-    end_time: DateTime<Local>,
-    start_msg: Instant,
-    end_msg: Instant,
-    participants: HashSet<String>,
-    starter: String,
-}
-
 static WARS: Storage<Mutex<HashMap<W, War>>> = Storage::new();
 
 fn wars<'a>() -> MutexGuard<'a, HashMap<W, War>> {
@@ -43,6 +33,16 @@ named!(parse_ww<(u32,u32)>, do_parse!(
     dur: dec >>
     (min, dur)
 ));
+
+#[derive(Clone,Debug)]
+struct War {
+    start_time: DateTime<Local>,
+    end_time: DateTime<Local>,
+    start_msg: Option<Instant>,
+    end_msg: Option<Instant>,
+    participants: HashSet<String>,
+    starter: String,
+}
 
 impl War {
     fn parse(bytes: &[u8]) -> Result<(DateTime<Local>, DateTime<Local>), String> {
@@ -60,9 +60,26 @@ impl War {
         Ok((start_time, start_time + Duration::minutes(dur as i64)))
     }
 
+    fn register_msgs(&mut self, e: &Event) {
+        let start = until(self.start_time).map(|t| {
+            e.respond_in(format!(
+                    "{}: <b>START WRITING!</b>",
+                    self.participants.clone().into_iter().collect::<Vec<_>>().join(", "))
+                , t)
+        });
+        let end = until(self.end_time).map(|t| {
+            e.respond_in(format!(
+                    "{}: <b>STOP WRITING!</b>",
+                    self.participants.clone().into_iter().collect::<Vec<_>>().join(", "))
+                , t)
+        });
+        self.start_msg = start;
+        self.end_msg = end;
+    }
+
     fn cancel(&self, e: &Event) {
-        e.cancel(self.start_msg);
-        e.cancel(self.end_msg);
+        self.start_msg.map(|t|e.cancel(t));
+        self.end_msg.map(|t|e.cancel(t));
     }
 }
 
@@ -78,9 +95,10 @@ pub fn wordwar(e: &Event) -> Hooks {
 fn wordwar_cancel(e: &Event, id: &str) -> Hooks {
     match id.parse() {
         Ok(h) => {
-            match wars().get(&h) {
+            let mut wars_guard = wars();
+            match wars_guard.get(&h).cloned() {
                 Some(w) => if w.starter == string!(e.sender) {
-                    let war = wars().remove(&h).unwrap();
+                    let war = wars_guard.remove(&h).unwrap();
                     war.cancel(&e);
                     e.respond_highlight(format!("Canceled war #{}.", h))
                 } else {
@@ -116,26 +134,28 @@ fn wordwar_at(e: &Event, rest: &str) -> Hooks {
         Ok((start_instant, end_instant)) => {
             let w = W::next();
 
-            let start = e.respond_in(format!("{}: <b>START WRITING!</b>", string!(e.sender)), until(start_instant).unwrap());
-            let end = e.respond_in(format!("{}: <b>STOP WRITING!</b>", string!(e.sender)), until(end_instant).unwrap());
-
             e.respond_highlight(format!("Scheduled war with ID #{}.", w));
 
-            let start_cloned = start.clone();
             let w2 = w.clone();
 
-            wars().insert(w, War {
+            let mut new_war = War {
                 start_time: start_instant,
                 end_time: end_instant,
-                start_msg: start,
-                end_msg: end,
+                start_msg: None,
+                end_msg: None,
                 participants: {
                     let mut h = HashSet::new();
                     h.insert(string!(e.sender));
                     h
                 },
                 starter: string!(e.sender),
-            });
+            };
+            new_war.register_msgs(&e);
+
+            let start_cloned = new_war.start_msg.clone().unwrap();
+            let end_cloned = new_war.end_msg.clone().unwrap();
+
+            wars().insert(w, new_war);
 
             return vec![Hook::register("in", |m| box move |e| {
                 if Instant::now() > start_cloned {
@@ -145,12 +165,31 @@ fn wordwar_at(e: &Event, rest: &str) -> Hooks {
                 let mut wars = wars();
                 match wars.get_mut(&w) {
                     None => return vec![Hook::unregister(m)],
-                    Some(ref mut current_war) => {
+                    Some(mut current_war) => {
                         if current_war.participants.contains(&string!(e.sender)) {
                             e.respond_highlight("You're already in this war.");
                         } else {
                             current_war.participants.insert(string!(e.sender));
                             e.respond_highlight(format!("You've been added to war #{}.", w2));
+                        }
+                    }
+                }
+
+                vec![]
+            }), Hook::register("out", |m| box move |e| {
+                if Instant::now() > end_cloned {
+                    return vec![Hook::unregister(m)];
+                }
+
+                let mut wars = wars();
+                match wars.get_mut(&w) {
+                    None => return vec![Hook::unregister(m)],
+                    Some(mut current_war) => {
+                        if current_war.participants.contains(&string!(e.sender)) {
+                            current_war.participants.remove(&string!(e.sender));
+                            e.respond_highlight(format!("You've been removed from war #{}.", w2));
+                        } else {
+                            e.respond_highlight("You're not in this war.");
                         }
                     }
                 }
