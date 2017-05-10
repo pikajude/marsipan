@@ -61,6 +61,7 @@ impl War {
     }
 
     fn register_msgs(&mut self, e: &Event) {
+        self.cancel(e);
         let start = until(self.start_time).map(|t| {
             e.respond_in(format!(
                     "{}: <b>START WRITING!</b>",
@@ -170,6 +171,7 @@ fn wordwar_at(e: &Event, rest: &str) -> Hooks {
                             e.respond_highlight("You're already in this war.");
                         } else {
                             current_war.participants.insert(string!(e.sender));
+                            current_war.register_msgs(&e);
                             e.respond_highlight(format!("You've been added to war #{}.", w2));
                         }
                     }
@@ -187,6 +189,7 @@ fn wordwar_at(e: &Event, rest: &str) -> Hooks {
                     Some(mut current_war) => {
                         if current_war.participants.contains(&string!(e.sender)) {
                             current_war.participants.remove(&string!(e.sender));
+                            current_war.register_msgs(&e);
                             e.respond_highlight(format!("You've been removed from war #{}.", w2));
                         } else {
                             e.respond_highlight("You're not in this war.");
