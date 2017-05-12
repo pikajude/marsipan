@@ -1,4 +1,5 @@
 use hooks::{Command,Hook,Hooks};
+use std::time::Duration;
 
 mod about;
 mod commands;
@@ -39,7 +40,17 @@ pub fn default_cmds() -> Hooks {
                  "sleep" => cmd!(sleep::sleep),
                  "wakeup" => cmd!(sleep::wakeup),
                  "welcome" => cmd!(welcome::welcome),
-                 "ww" => cmd!(wordwar::wordwar) ],
+                 "ww" => cmd!(wordwar::wordwar),
+
+                 "botkin" => |_| box |e| {
+                     e.respond("lol");
+                     e.respond_in("huh?", Duration::from_millis(500));
+                     vec![]
+                 },
+                 "trigcheck" => |_| box |e| {
+                     e.respond_highlight("!");
+                     vec![]
+                 } ],
 
         msg => [],
 
