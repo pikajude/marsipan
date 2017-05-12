@@ -38,6 +38,7 @@ named!(parse_ww<(u32,u32)>, do_parse!(
 struct War {
     start_time: DateTime<Local>,
     end_time: DateTime<Local>,
+    minutes: i64,
     start_msg: Option<Instant>,
     end_msg: Option<Instant>,
     participants: HashSet<String>,
@@ -45,7 +46,7 @@ struct War {
 }
 
 impl War {
-    fn parse(bytes: &[u8]) -> Result<(DateTime<Local>, DateTime<Local>), String> {
+    fn parse(bytes: &[u8]) -> Result<(DateTime<Local>, DateTime<Local>, i64), String> {
         let (at, dur) = parse_ww(bytes).to_full_result()
             .map_err(|_|format!("Usage: !ww at :<b>time</b> for <b>minutes</b>"))?;
         if dur > 59 {
@@ -57,7 +58,7 @@ impl War {
         } else {
             current_time
         }.with_minute(at).and_then(|m|m.with_second(0)).ok_or("math error")?;
-        Ok((start_time, start_time + Duration::minutes(dur as i64)))
+        Ok((start_time, start_time + Duration::minutes(dur as i64), dur as i64))
     }
 
     fn register_msgs(&mut self, e: &Event) {
@@ -111,12 +112,30 @@ fn wordwar_cancel(e: &Event, id: &str) -> Hooks {
 fn wordwar_list(e: &Event) -> Hooks {
     let mut response = "<ul>".to_string();
     for (k, v) in wars().iter() {
+        if Local::now() > v.end_time {
+            continue
+        }
+
+        let now = Local::now();
+        let seconds_so_far = if now < v.start_time {
+            0
+        } else {
+            now.signed_duration_since(v.start_time).num_seconds()
+        };
+        let width = (seconds_so_far * 12) / (v.minutes * 60);
+
+        use std::iter::repeat;
+        let mut bar = String::new();
+        bar.push_str(&repeat('=').take(width as usize).collect::<String>());
+        bar.push_str(&repeat('.').take(12 - width as usize).collect::<String>());
+
         response.push_str(&format!(
-            "<li>#{id} (<b>{starter}</b>)<br><code>:{start} [===.........] :{end}</code></li>",
+            "<li>#{id} (<b>{starter}</b>)<br><code>:{start} [{bar}] :{end}</code></li>",
             id = k.un(),
             starter = v.starter,
-            start = v.start_time.format("%M").to_string(),
-            end = v.end_time.format("%M").to_string()));
+            bar = bar,
+            start = v.start_time.minute(),
+            end = v.end_time.minute()));
     }
     response.push_str("</ul>");
     e.respond(response);
@@ -127,7 +146,7 @@ fn wordwar_list(e: &Event) -> Hooks {
 fn wordwar_at(e: &Event, rest: &str) -> Hooks {
     let res = War::parse(rest.as_bytes());
     match res {
-        Ok((start_instant, end_instant)) => {
+        Ok((start_instant, end_instant, minutes)) => {
             let w = W::next();
 
             e.respond_highlight(format!("Scheduled war with ID #{}.", w));
@@ -137,6 +156,7 @@ fn wordwar_at(e: &Event, rest: &str) -> Hooks {
             let mut new_war = War {
                 start_time: start_instant,
                 end_time: end_instant,
+                minutes: minutes,
                 start_msg: None,
                 end_msg: None,
                 participants: {
