@@ -3,7 +3,7 @@ use diesel;
 use diesel::associations::HasTable;
 
 mod models {
-    use super::schema::welcomes;
+    use ::db::welcomes;
 
     #[derive(Queryable,Debug)]
     pub struct Welcome {
@@ -21,10 +21,10 @@ mod models {
 
     impl Welcome {
         pub fn belongs_to(u: &[u8]) -> ::diesel::helper_types::FindBy<
-                super::schema::welcomes::dsl::welcomes,
-                super::schema::welcomes::dsl::user,
+                ::db::welcomes::dsl::welcomes,
+                ::db::welcomes::dsl::user,
                 String> {
-            use super::schema::welcomes::dsl::*;
+            use ::db::welcomes::dsl::*;
 
             use diesel::FilterDsl;
             use diesel::ExpressionMethods;
@@ -32,10 +32,6 @@ mod models {
             welcomes.filter(user.eq(string!(u)))
         }
     }
-}
-
-mod schema {
-    infer_schema!("dotenv:DATABASE_URL");
 }
 
 pub fn say_welcome(e: &Event) -> Hooks {
@@ -51,7 +47,7 @@ pub fn say_welcome(e: &Event) -> Hooks {
 
 pub fn welcome(e: &Event) -> Hooks {
     use self::models::{NewWelcome,Welcome};
-    use self::schema::welcomes::dsl::*;
+    use ::db::welcomes::dsl::*;
 
     match word(&e.content()) {
         ("get", _) => {

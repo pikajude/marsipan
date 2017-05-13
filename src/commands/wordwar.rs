@@ -34,51 +34,64 @@ named!(parse_ww<(u32,u32)>, do_parse!(
     (min, dur)
 ));
 
-#[derive(Clone,Debug)]
-struct War {
-    start_time: DateTime<Local>,
-    end_time: DateTime<Local>,
-    minutes: i64,
-    start_msg: Option<Instant>,
-    end_msg: Option<Instant>,
-    participants: HashSet<String>,
-    starter: String,
-}
+mod models {
+    use event::Event;
+    use chrono::DateTime;
+    use chrono::Duration;
+    use chrono::Local;
+    use chrono::Timelike;
+    use std::collections::HashSet;
+    use std::time::Instant;
+    use super::{until,parse_ww};
 
-impl War {
-    fn parse(bytes: &[u8]) -> Result<(DateTime<Local>, DateTime<Local>, i64), String> {
-        let (at, dur) = parse_ww(bytes).to_full_result()
-            .map_err(|_|format!("Usage: !ww at :<b>time</b> for <b>minutes</b>"))?;
-        if dur > 59 {
-            return Err("Too many minutes.".to_string())
+    #[derive(Clone,Debug,Queryable)]
+    pub struct War {
+        pub start_time: DateTime<Local>,
+        pub end_time: DateTime<Local>,
+        pub minutes: i64,
+        pub start_msg: Option<Instant>,
+        pub end_msg: Option<Instant>,
+        pub participants: HashSet<String>,
+        pub starter: String,
+    }
+
+    impl War {
+        pub fn parse(bytes: &[u8]) -> Result<(DateTime<Local>, DateTime<Local>, i64), String> {
+            let (at, dur) = parse_ww(bytes).to_full_result()
+                .map_err(|_|format!("Usage: !ww at :<b>time</b> for <b>minutes</b>"))?;
+            if dur > 59 {
+                return Err("Too many minutes.".to_string())
+            }
+            let current_time = Local::now();
+            let start_time = if current_time.minute() >= at {
+                current_time + Duration::hours(1)
+            } else {
+                current_time
+            }.with_minute(at).and_then(|m|m.with_second(0)).ok_or("math error")?;
+            Ok((start_time, start_time + Duration::minutes(dur as i64), dur as i64))
         }
-        let current_time = Local::now();
-        let start_time = if current_time.minute() >= at {
-            current_time + Duration::hours(1)
-        } else {
-            current_time
-        }.with_minute(at).and_then(|m|m.with_second(0)).ok_or("math error")?;
-        Ok((start_time, start_time + Duration::minutes(dur as i64), dur as i64))
-    }
 
-    fn register_msgs(&mut self, e: &Event) {
-        self.cancel(e);
-        let participants_list = self.participants.clone().into_iter().collect::<Vec<_>>().join(", ");
-        let start = until(self.start_time).map(|t| {
-            e.respond_in(format!("{}: <b>START WRITING!</b>", participants_list), t)
-        });
-        let end = until(self.end_time).map(|t| {
-            e.respond_in(format!("{}: <b>STOP WRITING!</b>", participants_list), t)
-        });
-        self.start_msg = start;
-        self.end_msg = end;
-    }
+        pub fn register_msgs(&mut self, e: &Event) {
+            self.cancel(e);
+            let participants_list = self.participants.clone().into_iter().collect::<Vec<_>>().join(", ");
+            let start = until(self.start_time).map(|t| {
+                e.respond_in(format!("{}: <b>START WRITING!</b>", participants_list), t)
+            });
+            let end = until(self.end_time).map(|t| {
+                e.respond_in(format!("{}: <b>STOP WRITING!</b>", participants_list), t)
+            });
+            self.start_msg = start;
+            self.end_msg = end;
+        }
 
-    fn cancel(&self, e: &Event) {
-        self.start_msg.map(|t|e.cancel(t));
-        self.end_msg.map(|t|e.cancel(t));
+        pub fn cancel(&self, e: &Event) {
+            self.start_msg.map(|t|e.cancel(t));
+            self.end_msg.map(|t|e.cancel(t));
+        }
     }
 }
+
+use self::models::War;
 
 pub fn wordwar(e: &Event) -> Hooks {
     match word(e.content()) {

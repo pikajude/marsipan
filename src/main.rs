@@ -39,6 +39,7 @@ use std::env;
 
 pub mod codec;
 pub mod commands;
+pub mod db;
 pub mod hooks;
 pub mod event;
 pub mod handler;
