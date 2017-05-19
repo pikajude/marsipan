@@ -18,10 +18,11 @@ fn until(other: DateTime<Local>) -> Option<StdDuration> {
     Some(StdDuration::new(d.num_seconds() as u64, nanos_only.num_nanoseconds().unwrap() as u32))
 }
 
-static WARS: Storage<Mutex<HashMap<W, War>>> = Storage::new();
+static _WARS: Storage<Mutex<HashMap<W, War>>> = Storage::new();
 
+#[allow(non_snake_case)]
 fn WARS<'a>() -> MutexGuard<'a, HashMap<W, War>> {
-    WARS.get().lock().unwrap()
+    _WARS.get().lock().unwrap()
 }
 
 named!(dec<u32>, map_res!(map_res!(digit, ::std::str::from_utf8), ::std::str::FromStr::from_str));
@@ -220,5 +221,5 @@ fn wordwar_at(e: &Event, rest: &str) -> Hooks {
 }
 
 pub fn wars_init() {
-    WARS.set(Mutex::new(HashMap::new()));
+    _WARS.set(Mutex::new(HashMap::new()));
 }
