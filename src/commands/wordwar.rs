@@ -20,7 +20,7 @@ fn until(other: DateTime<Local>) -> Option<StdDuration> {
 
 static WARS: Storage<Mutex<HashMap<W, War>>> = Storage::new();
 
-fn wars<'a>() -> MutexGuard<'a, HashMap<W, War>> {
+fn WARS<'a>() -> MutexGuard<'a, HashMap<W, War>> {
     WARS.get().lock().unwrap()
 }
 
@@ -92,7 +92,7 @@ pub fn wordwar(e: &Event) -> Hooks {
 fn wordwar_cancel(e: &Event, id: &str) -> Hooks {
     match id.parse() {
         Ok(h) => {
-            let mut wars_guard = wars();
+            let mut wars_guard = WARS();
             match wars_guard.get(&h).cloned() {
                 Some(w) => if w.starter == string!(e.sender) {
                     let war = wars_guard.remove(&h).unwrap();
@@ -111,7 +111,7 @@ fn wordwar_cancel(e: &Event, id: &str) -> Hooks {
 
 fn wordwar_list(e: &Event) -> Hooks {
     let mut response = "<ul>".to_string();
-    for (k, v) in wars().iter() {
+    for (k, v) in WARS().iter() {
         if Local::now() > v.end_time {
             continue
         }
@@ -171,13 +171,13 @@ fn wordwar_at(e: &Event, rest: &str) -> Hooks {
             let start_cloned = new_war.start_msg.clone().unwrap();
             let end_cloned = new_war.end_msg.clone().unwrap();
 
-            wars().insert(w, new_war);
+            WARS().insert(w, new_war);
 
             return vec![Hook::register("in", |m| box move |e|
                 if Instant::now() > start_cloned {
                     vec![Hook::unregister(m)]
                 } else {
-                    match wars().get_mut(&w) {
+                    match WARS().get_mut(&w) {
                         None => return vec![Hook::unregister(m)],
                         Some(mut current_war) => {
                             if current_war.participants.contains(&string!(e.sender)) {
@@ -196,7 +196,7 @@ fn wordwar_at(e: &Event, rest: &str) -> Hooks {
                 if Instant::now() > end_cloned {
                     vec![Hook::unregister(m)]
                 } else {
-                    match wars().get_mut(&w) {
+                    match WARS().get_mut(&w) {
                         None => return vec![Hook::unregister(m)],
                         Some(mut current_war) => {
                             if current_war.participants.contains(&string!(e.sender)) {
